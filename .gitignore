@@ -1,0 +1,8 @@
+#Ingore node_modules
+node_modules
+# Ignore build output
+dist
+# Ignore local environment variables
+src/serviceAccountKey.json
+.env
+*.log
