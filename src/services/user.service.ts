@@ -32,13 +32,33 @@ export class UserService {
     }
   }
 
+  static async findUserByCnpAndMatriculation(
+    cnp: string,
+    matriculationNumber: string
+  ): Promise<IUser | null> {
+    try {
+      const user = await User.findOne({ cnp, matriculationNumber });
+      if (!user) return null;
+      return this.mapToIUser(user);
+    } catch (error: unknown) {
+      console.error('Error finding user by CNP and Matriculation number:', error);
+      throw new Error(error instanceof Error ? error.message : 'Failed to find user');
+    }
+  }
+
   static async getAllUsers(): Promise<IUser[]> {
     try {
+      // Fetch all users without password field
       const users = await User.find().select('-password');
-      const usersWithFirebase = await Promise.all(users.map(async (user) => {
-        const firebaseProfile = await FirebaseService.getUserProfile(user._id.toString());
-        return this.mapToIUser(user, firebaseProfile || undefined);
-      }));
+      
+      // Fetch Firebase profiles for all users in parallel
+      const usersWithFirebase = await Promise.all(
+        users.map(async (user) => {
+          const firebaseProfile = await FirebaseService.getUserProfile(user._id.toString());
+          return this.mapToIUser(user, firebaseProfile || undefined);
+        })
+      );
+      
       return usersWithFirebase;
     } catch (error: unknown) {
       console.error('Error fetching all users:', error);
@@ -145,10 +165,10 @@ export class UserService {
     }
   }
 
-  static async setResetCode(email: string, code: string, expiry: number): Promise<IUser | null> {
+  static async setResetCode(cnp: string, matriculationNumber: string, code: string, expiry: number): Promise<IUser | null> {
     try {
       const user = await User.findOneAndUpdate(
-        { email },
+        { cnp, matriculationNumber },
         { resetCode: code, resetCodeExpiry: expiry },
         { new: true }
       );
@@ -160,16 +180,46 @@ export class UserService {
     }
   }
 
-  static async verifyResetCode(email: string, code: string): Promise<boolean> {
+  static async verifyResetCode(cnp: string, matriculationNumber: string, code: string): Promise<boolean> {
     try {
-      const user = await User.findOne({ email, resetCode: code });
-      if (!user || !user.resetCodeExpiry || Date.now() > user.resetCodeExpiry) {
+      const user = await User.findOne({ cnp, matriculationNumber });
+  
+      if (!user || !user.resetCode || !user.resetCodeExpiry) {
         return false;
       }
-      return true;
+  
+      const isCodeValid = user.resetCode === code;
+      const isNotExpired = Date.now() <= user.resetCodeExpiry;
+  
+      return isCodeValid && isNotExpired;
     } catch (error: unknown) {
       console.error('Error verifying reset code:', error);
       throw new Error(error instanceof Error ? error.message : 'Failed to verify reset code');
+    }
+  }
+
+  static async updatePasswordByCnpAndMatriculation(
+    cnp: string,
+    matriculationNumber: string,
+    newPassword: string
+  ): Promise<IUser | null> {
+    try {
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      const user = await User.findOneAndUpdate(
+        { cnp, matriculationNumber },
+        { 
+          password: hashedPassword,
+          resetCode: null,
+          resetCodeExpiry: null
+        },
+        { new: true }
+      ).select('-password');
+      
+      if (!user) return null;
+      return this.mapToIUser(user);
+    } catch (error: unknown) {
+      console.error('Error updating password:', error);
+      throw new Error(error instanceof Error ? error.message : 'Failed to update password');
     }
   }
 

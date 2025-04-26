@@ -1,13 +1,16 @@
-import { initializeApp, getApps } from 'firebase-admin/app';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import * as admin from 'firebase-admin';
+import { readFile } from 'fs/promises';
 import path from 'path';
 
-export function initializeFirebase() {
+export async function initializeFirebase() {
   if (!getApps().length) {
-    const serviceAccount = require(path.join(__dirname, '../../serviceAccountKey.json'));
-    
+    const serviceAccountPath = path.join(__dirname, '../../serviceAccountKey.json');
+    const rawData = await readFile(serviceAccountPath, 'utf-8');
+    const serviceAccount = JSON.parse(rawData);
+
     initializeApp({
-      credential: admin.credential.cert(serviceAccount)
+      credential: cert(serviceAccount)
     });
   }
-} 
+}

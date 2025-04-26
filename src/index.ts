@@ -1,13 +1,14 @@
-import { connectToMongoDB } from './src/database/mongo';
-import { initializeFirebase } from './src/config/firebase.config';
+import { connectToMongoDB } from './database/mongo';
+import { initializeFirebase } from './config/firebase.config';
 import { fastify } from 'fastify';
 import dotenv from 'dotenv';
-import { userRoutes } from './src/controllers/user.controller';
-import { testRoutes } from './src/controllers/test.controller';
-import { authRoutes } from './src/controllers/auth.controller';
+import { userRoutes, authRoutes, testRoutes } from './routes';
 import fastifyJwt from '@fastify/jwt';
 
 dotenv.config();
+
+// MARK: -For api versioning
+const v1BaseUrl: string = "/api";
 
 const app = fastify();
 
@@ -21,9 +22,9 @@ connectToMongoDB();
 initializeFirebase();
 
 // Register routes
-app.register(userRoutes, { prefix: '/users' });
-app.register(testRoutes, { prefix: '/api' });
-app.register(authRoutes, { prefix: '/auth' });
+app.register(userRoutes, { prefix: `${v1BaseUrl}/users` });
+app.register(testRoutes, { prefix: `${v1BaseUrl}/test` });
+app.register(authRoutes, { prefix: `${v1BaseUrl}/auth` });
 
 const start = async () => {
   try {

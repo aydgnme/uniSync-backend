@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { faker } from '@faker-js/faker';
 
-const BASE_URL = 'http://localhost:3000/auth/register';
+const BASE_URL = 'http://localhost:3000/users/';
 
 const allGroups = [
   '3111', '3112', '3113', '3114',
@@ -19,15 +19,15 @@ function generatePhoneNumber(): string {
 async function registerStudent(index: number) {
   const groupName = allGroups[index % allGroups.length];
 
-  const firstName = faker.person.firstName().toLowerCase();
-  const lastName = faker.person.lastName().toLowerCase();
-  const email = `${firstName}.${lastName}@student.usv.ro`;
+  const firstName = faker.person.firstName();
+  const lastName = faker.person.lastName();
+  const email = `${firstName.toLowerCase()}.${lastName.toLowerCase()}@student.usv.ro`;
 
   const student = {
     email,
     password: 'Student@123',
     cnp: faker.string.numeric(13),
-    matriculationNumber: (10000 + index).toString(),
+    matriculationNumber: (20000 + index).toString(),
     name: `${firstName} ${lastName}`,
     role: 'Student',
     phone: generatePhoneNumber(),
@@ -37,7 +37,7 @@ async function registerStudent(index: number) {
       semester: faker.number.int({ min: 1, max: 8 }),
       groupName,
       subgroupIndex: faker.helpers.arrayElement(['a', 'b']),
-      studentId: (10000 + index).toString(),
+      studentId: (20000 + index).toString(),
       advisor: `Prof. Dr. ${faker.person.fullName()}`,
       gpa: parseFloat((Math.random() * 3 + 6).toFixed(2))
     }

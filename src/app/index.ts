@@ -1,8 +1,15 @@
 import Fastify from 'fastify';
-import authRoutes from '../routes/auth';
+import fastifyJwt from '@fastify/jwt';
 
 export function buildServer() {
   const app = Fastify({ logger: true });
-  app.register(authRoutes);
+  
+  // Register JWT plugin
+  app.register(fastifyJwt, {
+    secret: process.env.JWT_SECRET || 'your-secret-key',
+    sign: {
+      expiresIn: '1d'
+    }
+  });
   return app;
 }

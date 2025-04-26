@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "ESNext",
+    "target": "ES2017",
     "module": "CommonJS",
     "moduleResolution": "Node",
     "strict": true,
@@ -9,8 +9,18 @@
     "outDir": "dist",
     "baseUrl": ".",
     "paths": {
+      "@app":["src/app/index.ts"],
+      "@utils":["src/utils/index.ts"],
+      "@config":["src/config/index.ts"],
+      "@models":["src/models/index.ts"],
+      "@services":["src/services/index.ts"],
+      "@types":["src/types/index.ts"],
+      "@middlewares":["src/middlewares/index.ts"],
+      "@controllers":["src/controllers/index.ts"],
+      "@routes": ["src/routes/index.ts"],
       "*": ["node_modules/*", "src/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules"]
 }
