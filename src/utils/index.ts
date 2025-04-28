@@ -1,4 +1,4 @@
 export * from './response.sender';
-export * from './timeUtils';
+export * from './time.utils';
 export * from './fetchJson';
 export * from './generateCode'; 
