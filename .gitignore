@@ -6,3 +6,4 @@ dist
 src/serviceAccountKey.json
 .env
 *.log
+serviceAccountKey.json
