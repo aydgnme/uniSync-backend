@@ -3,7 +3,7 @@ node_modules
 # Ignore build output
 dist
 # Ignore local environment variables
-src/serviceAccountKey.json
-serviceAccountKey.json
+servAccountKey.json
+.env.local
 .env
 *.log
