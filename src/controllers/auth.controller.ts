@@ -2,9 +2,9 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { UserService } from '../services/user.service';
 import { IUserBase } from '../models/user.model';
 import { z } from 'zod';
-import * as bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { sendPasswordResetCodeEmail } from '../services/email.service';
+import * as bcrypt from 'bcryptjs';
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -156,15 +156,15 @@ export const AuthController = {
         return reply.code(404).send({ message: 'User not found' });
       }
 
-      const resetCode = uuidv4();
+      // Generate 6-digit code
+      const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
       const expiry = Date.now() + 10 * 60 * 1000; // 10 minutes
 
       await UserService.setResetCode(parsed.data.cnp, parsed.data.matriculationNumber, resetCode, expiry);
       await sendPasswordResetCodeEmail(user.email, resetCode);
 
       return reply.code(200).send({ 
-        message: 'Password reset code sent to your email',
-        code: resetCode // For testing purposes only
+        message: 'Password reset code sent to your email'
       });
     } catch (error) {
       console.error('Reset code generation error:', error);
@@ -201,12 +201,15 @@ export const AuthController = {
         return reply.code(400).send({ message: 'Invalid or expired reset code' });
       }
 
-      const hashedPassword = await bcrypt.hash(parsed.data.newPassword, 10);
-      await UserService.updatePasswordByCnpAndMatriculation(
+      const updatedUser = await UserService.updatePasswordByCnpAndMatriculation(
         parsed.data.cnp,
         parsed.data.matriculationNumber,
-        hashedPassword
+        parsed.data.newPassword
       );
+
+      if (!updatedUser) {
+        return reply.code(500).send({ message: 'Failed to update password' });
+      }
 
       return reply.code(200).send({ message: 'Password reset successful' });
     } catch (error) {
