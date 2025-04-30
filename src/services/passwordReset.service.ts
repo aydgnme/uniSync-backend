@@ -1,4 +1,5 @@
 import { createHash } from 'crypto';
+import * as bcrypt from 'bcryptjs';
 import { PasswordReset } from '../models/PasswordReset.model';
 import { User } from '../models/user.model';
 import { generateCode } from '../utils/generateCode';
@@ -46,20 +47,20 @@ export class PasswordResetService {
   ): Promise<boolean> {
     const key = this.generateKey(cnp, matriculationNumber);
     const resetData = await PasswordReset.findOne({ key, code });
-
+  
     if (!resetData) return false;
     if (resetData.expiresAt < new Date()) return false;
-
-    // Update user password
+  
     const user = await User.findOne({ cnp, matriculationNumber });
     if (!user) return false;
-
-    user.password = newPassword;
+  
+    // ✅ Şifreyi hashle
+    const hashed = await bcrypt.hash(newPassword, 10);
+    user.password = hashed;
+  
     await user.save();
-
-    // Delete reset code
     await PasswordReset.deleteOne({ key });
-
+  
     return true;
   }
 } 

@@ -1,12 +1,14 @@
 import { User, IUser, IUserDocument, IUserBase } from '../models/user.model';
-import * as bcrypt from 'bcryptjs';
 import { FirebaseService } from './firebase.service';
 import { DocumentData } from 'firebase-admin/firestore';
+import * as bcrypt from 'bcryptjs';
 
 export class UserService {
+  private static readonly SALT_ROUNDS = 10;
+
   static async createUser(userData: IUserBase): Promise<IUser> {
     try {
-      const hashedPassword = await bcrypt.hash(userData.password, 10);
+      const hashedPassword = await bcrypt.hash(userData.password, this.SALT_ROUNDS);
       const user = new User({
         ...userData,
         password: hashedPassword
@@ -83,6 +85,13 @@ export class UserService {
     try {
       const user = await User.findOne({ email });
       if (!user) return null;
+      
+      console.log('User found by email:', {
+        email: user.email,
+        passwordHash: user.password,
+        _id: user._id
+      });
+      
       return this.mapToIUser(user);
     } catch (error: unknown) {
       console.error('Error fetching user by email:', error);
@@ -115,7 +124,7 @@ export class UserService {
   static async updateUser(id: string, userData: Partial<IUserBase>): Promise<IUser | null> {
     try {
       if (userData.password) {
-        userData.password = await bcrypt.hash(userData.password, 10);
+        userData.password = await bcrypt.hash(userData.password, this.SALT_ROUNDS);
       }
       const user = await User.findByIdAndUpdate(id, userData, { new: true }).select('-password');
       if (!user) return null;
@@ -151,7 +160,7 @@ export class UserService {
 
   static async updatePassword(id: string, newPassword: string): Promise<IUser | null> {
     try {
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      const hashedPassword = await bcrypt.hash(newPassword, this.SALT_ROUNDS);
       const user = await User.findByIdAndUpdate(
         id,
         { password: hashedPassword },
@@ -183,15 +192,10 @@ export class UserService {
   static async verifyResetCode(cnp: string, matriculationNumber: string, code: string): Promise<boolean> {
     try {
       const user = await User.findOne({ cnp, matriculationNumber });
-  
       if (!user || !user.resetCode || !user.resetCodeExpiry) {
         return false;
       }
-  
-      const isCodeValid = user.resetCode === code;
-      const isNotExpired = Date.now() <= user.resetCodeExpiry;
-  
-      return isCodeValid && isNotExpired;
+      return user.resetCode === code && Date.now() <= user.resetCodeExpiry;
     } catch (error: unknown) {
       console.error('Error verifying reset code:', error);
       throw new Error(error instanceof Error ? error.message : 'Failed to verify reset code');
@@ -204,8 +208,17 @@ export class UserService {
     newPassword: string
   ): Promise<IUser | null> {
     try {
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
-      const user = await User.findOneAndUpdate(
+      // Find user
+      const user = await User.findOne({ cnp, matriculationNumber });
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      // Hash new password
+      const hashedPassword = await bcrypt.hash(newPassword, this.SALT_ROUNDS);
+      
+      // Update password
+      const updatedUser = await User.findOneAndUpdate(
         { cnp, matriculationNumber },
         { 
           password: hashedPassword,
@@ -213,10 +226,19 @@ export class UserService {
           resetCodeExpiry: null
         },
         { new: true }
-      ).select('-password');
+      );
       
-      if (!user) return null;
-      return this.mapToIUser(user);
+      if (!updatedUser) {
+        throw new Error('Failed to update password');
+      }
+
+      // Verify updated password
+      const isPasswordValid = await bcrypt.compare(newPassword, updatedUser.password);
+      if (!isPasswordValid) {
+        throw new Error('Password update verification failed');
+      }
+
+      return this.mapToIUser(updatedUser);
     } catch (error: unknown) {
       console.error('Error updating password:', error);
       throw new Error(error instanceof Error ? error.message : 'Failed to update password');
@@ -224,10 +246,11 @@ export class UserService {
   }
 
   private static mapToIUser(user: IUserDocument, firebaseData?: DocumentData): IUser {
-    const { _id, ...rest } = user.toObject();
+    const { _id, password, ...rest } = user.toObject();
     return {
       ...rest,
       _id: _id.toString(),
+      password,
       firebaseData
     };
   }
