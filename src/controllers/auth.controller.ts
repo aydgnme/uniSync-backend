@@ -53,7 +53,14 @@ export const AuthController = {
         return reply.code(401).send({ message: 'Invalid email or password' });
       }
 
+      console.log('Attempting password comparison:', {
+        inputPassword: parsed.data.password,
+        storedHash: user.password
+      });
+
       const isPasswordValid = await bcrypt.compare(parsed.data.password, user.password);
+      console.log('Password comparison result:', isPasswordValid);
+
       if (!isPasswordValid) {
         return reply.code(401).send({ message: 'Invalid email or password' });
       }

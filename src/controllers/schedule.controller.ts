@@ -297,21 +297,23 @@ export const getTodaySchedule = async (request: FastifyRequest, reply: FastifyRe
       return weeks.includes(weekNumber);
     });
 
-    const courses = filteredLectures.map((lecture, index) => ({
-      id: `course-${index + 1}`,
-      code: lecture.code,
-      title: lecture.title,
-      type: lecture.type,
-      startTime: lecture.startHour,
-      endTime: calculateEndTime(lecture.startHour, lecture.duration),
-      duration: lecture.duration,
-      room: lecture.room,
-      teacher: lecture.teacher,
-      group: lecture.group,
-      subgroup: lecture.subgroup,
-      parity: lecture.parity,
-      weekDay: lecture.weekDay,
-    }));
+    const courses = filteredLectures
+      .map((lecture, index) => ({
+        id: `course-${index + 1}`,
+        code: lecture.code,
+        title: lecture.title,
+        type: lecture.type,
+        startTime: lecture.startHour,
+        endTime: calculateEndTime(lecture.startHour, lecture.duration),
+        duration: lecture.duration,
+        room: lecture.room,
+        teacher: lecture.teacher,
+        group: lecture.group,
+        subgroup: lecture.subgroup,
+        parity: lecture.parity,
+        weekDay: lecture.weekDay,
+      }))
+      .sort((a, b) => a.startTime.localeCompare(b.startTime));
 
     const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 

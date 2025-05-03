@@ -57,7 +57,7 @@ export function getAcademicWeekNumber(): number {
     week = 14;
   }
 
-  return 5;
+  return 2;
 }
 
 export function getParity(weekNumber: number): 'ODD' | 'EVEN' {

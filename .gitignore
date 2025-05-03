@@ -3,7 +3,19 @@ node_modules
 # Ignore build output
 dist
 # Ignore local environment variables
-servAccountKey.json
+serviceAccountKey.json
+.env.development.local
+.env.test.local
+.env.production.local
+.env.development
+.env.test
+.env.production
 .env.local
 .env
 *.log
+
+# Ignore .json files
+*.json
+
+# Ignore DS_Store files
+.DS_Store

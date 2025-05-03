@@ -3,6 +3,7 @@ import * as bcrypt from 'bcryptjs';
 import { PasswordReset } from '../models/PasswordReset.model';
 import { User } from '../models/user.model';
 import { generateCode } from '../utils/generateCode';
+import { UserService } from './user.service';
 
 export class PasswordResetService {
   private static generateKey(cnp: string, matriculationNumber: string): string {
@@ -45,22 +46,29 @@ export class PasswordResetService {
     code: string,
     newPassword: string
   ): Promise<boolean> {
-    const key = this.generateKey(cnp, matriculationNumber);
-    const resetData = await PasswordReset.findOne({ key, code });
-  
-    if (!resetData) return false;
-    if (resetData.expiresAt < new Date()) return false;
-  
-    const user = await User.findOne({ cnp, matriculationNumber });
-    if (!user) return false;
-  
-    // ✅ Şifreyi hashle
-    const hashed = await bcrypt.hash(newPassword, 10);
-    user.password = hashed;
-  
-    await user.save();
-    await PasswordReset.deleteOne({ key });
-  
-    return true;
+    try {
+      const key = this.generateKey(cnp, matriculationNumber);
+      const resetData = await PasswordReset.findOne({ key, code });
+    
+      if (!resetData) return false;
+      if (resetData.expiresAt < new Date()) return false;
+    
+      // UserService kullanarak şifre güncelleme
+      const updatedUser = await UserService.updatePasswordByCnpAndMatriculation(
+        cnp,
+        matriculationNumber,
+        newPassword
+      );
+
+      if (!updatedUser) return false;
+    
+      // Reset kodunu sil
+      await PasswordReset.deleteOne({ key });
+    
+      return true;
+    } catch (error) {
+      console.error('Error in resetPassword:', error);
+      return false;
+    }
   }
 } 

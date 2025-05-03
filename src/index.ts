@@ -2,7 +2,7 @@ import { connectToMongoDB } from './database/mongo';
 import { initializeFirebase } from './config/firebase.config';
 import { fastify } from 'fastify';
 import dotenv from 'dotenv';
-import { userRoutes, authRoutes, testRoutes, scheduleRoutes } from './routes';
+import { userRoutes, authRoutes, testRoutes, scheduleRoutes, courseGradeRoutes} from './routes';
 import fastifyJwt from '@fastify/jwt';
 
 dotenv.config();
@@ -26,6 +26,7 @@ app.register(userRoutes, { prefix: `${v1BaseUrl}/users` });
 app.register(testRoutes, { prefix: `${v1BaseUrl}/test` });
 app.register(authRoutes, { prefix: `${v1BaseUrl}/auth` });
 app.register(scheduleRoutes, { prefix: `${v1BaseUrl}/schedules` });
+app.register(courseGradeRoutes, { prefix: '/api/grades' });
 
 const start = async () => {
   try {
