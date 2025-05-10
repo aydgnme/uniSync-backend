@@ -74,6 +74,11 @@ async function fetchLectures() {
   await connectToMongoDB();
   const groups = await Group.find();
 
+  // Clear existing lectures
+  await Lecture.deleteMany({});
+  console.log('Cleared existing lectures.');
+  console.log(`Fetched ${groups.length} groups from the database.`);
+
   for (const group of groups) {
     try {
       const response = await axios.get(`https://orar.usv.ro/orar/vizualizare//orar-grupe.php?mod=grupa&ID=${group.id}&json`);

@@ -37,45 +37,84 @@ const resetPasswordSchema = z.object({
   path: ["confirmPassword"]
 });
 
+const verifyResetCodeSchema = z.object({
+  cnp: z.string(),
+  matriculationNumber: z.string(),
+  code: z.string().length(6, 'Reset code must be 6 digits')
+});
+
+const registerSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6),
+  name: z.string(),
+  cnp: z.string(),
+  matriculationNumber: z.string(),
+  phone: z.string().optional(),
+  address: z.string().optional(),
+  academicInfo: z.object({
+    program: z.string(),
+    semester: z.number(),
+    groupName: z.string(),
+    subgroupIndex: z.string(),
+    advisor: z.string(),
+    gpa: z.number()
+  })
+});
+
 export const AuthController = {
   async login(request: FastifyRequest<{ Body: { email: string; password: string } }>, reply: FastifyReply) {
     try {
       const parsed = loginSchema.safeParse(request.body);
       if (!parsed.success) {
+        console.log('Login validation failed:', parsed.error.errors);
         return reply.code(400).send({ 
           message: 'Invalid login data',
           errors: parsed.error.errors 
         });
       }
 
-      const user = await UserService.getUserByEmail(parsed.data.email);
+      const normalizedEmail = parsed.data.email.toLowerCase().trim();
+      console.log('Attempting login for normalized email:', normalizedEmail);
+      
+      const user = await UserService.getUserByEmail(normalizedEmail, true);
       if (!user) {
+        console.log('User not found for email:', normalizedEmail);
         return reply.code(401).send({ message: 'Invalid email or password' });
       }
 
-      console.log('Attempting password comparison:', {
-        inputPassword: parsed.data.password,
-        storedHash: user.password
+      console.log('User found:', {
+        userId: user._id,
+        email: user.email,
+        hasPassword: !!user.password,
+        passwordLength: user.password?.length
       });
 
       const isPasswordValid = await bcrypt.compare(parsed.data.password, user.password);
-      console.log('Password comparison result:', isPasswordValid);
+      console.log('Password validation details:', {
+        isPasswordValid,
+        inputPasswordLength: parsed.data.password.length,
+        storedPasswordLength: user.password.length
+      });
 
       if (!isPasswordValid) {
+        console.log('Invalid password for user:', user.email);
         return reply.code(401).send({ message: 'Invalid email or password' });
       }
 
       const token = request.server.jwt.sign({ 
         userId: user._id,
-        email: user.email
+        email: user.email,
+        role: user.role || 'Student'
       });
 
+      console.log('Login successful for user:', user.email);
       return reply.code(200).send({ 
         token,
         user: {
           _id: user._id,
           email: user.email,
-          name: user.name
+          name: user.name,
+          role: user.role || 'Student'
         }
       });
     } catch (error) {
@@ -221,6 +260,107 @@ export const AuthController = {
       return reply.code(200).send({ message: 'Password reset successful' });
     } catch (error) {
       console.error('Password reset error:', error);
+      return reply.code(500).send({ message: 'Internal server error' });
+    }
+  },
+
+  async verifyResetCode(request: FastifyRequest<{ Body: { cnp: string; matriculationNumber: string; code: string } }>, reply: FastifyReply) {
+    try {
+      const parsed = verifyResetCodeSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ 
+          message: 'Invalid data',
+          errors: parsed.error.errors 
+        });
+      }
+
+      const user = await UserService.findUserByCnpAndMatriculation(
+        parsed.data.cnp,
+        parsed.data.matriculationNumber
+      );
+
+      if (!user) {
+        return reply.code(404).send({ message: 'User not found' });
+      }
+
+      const isValid = await UserService.verifyResetCode(
+        parsed.data.cnp,
+        parsed.data.matriculationNumber,
+        parsed.data.code
+      );
+
+      if (!isValid) {
+        return reply.code(400).send({ message: 'Invalid or expired reset code' });
+      }
+
+      return reply.code(200).send({ 
+        message: 'Reset code verified successfully',
+        isValid: true
+      });
+    } catch (error) {
+      console.error('Reset code verification error:', error);
+      return reply.code(500).send({ message: 'Internal server error' });
+    }
+  },
+
+  async register(request: FastifyRequest<{ Body: z.infer<typeof registerSchema> }>, reply: FastifyReply) {
+    try {
+      const parsed = registerSchema.safeParse(request.body);
+      if (!parsed.success) {
+        console.log('Registration validation failed:', parsed.error.errors);
+        return reply.code(400).send({ 
+          message: 'Invalid registration data',
+          errors: parsed.error.errors 
+        });
+      }
+
+      console.log('Attempting registration for email:', parsed.data.email);
+      
+      const existingUser = await UserService.getUserByEmail(parsed.data.email);
+      if (existingUser) {
+        console.log('Email already registered:', parsed.data.email);
+        return reply.code(400).send({ message: 'Email already registered' });
+      }
+
+      const userData: IUserBase = {
+        email: parsed.data.email,
+        password: parsed.data.password,
+        name: parsed.data.name,
+        cnp: parsed.data.cnp,
+        matriculationNumber: parsed.data.matriculationNumber,
+        phone: parsed.data.phone || '',
+        address: parsed.data.address || '',
+        role: 'Student',
+        academicInfo: {
+          ...parsed.data.academicInfo,
+          studentId: parsed.data.matriculationNumber
+        }
+      };
+
+      const user = await UserService.createUser(userData);
+
+      console.log('User registered successfully:', {
+        userId: user._id,
+        email: user.email
+      });
+
+      const token = request.server.jwt.sign({ 
+        userId: user._id,
+        email: user.email
+      });
+
+      return reply.code(201).send({ 
+        token,
+        user: {
+          _id: user._id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          academicInfo: user.academicInfo
+        }
+      });
+    } catch (error) {
+      console.error('Registration error:', error);
       return reply.code(500).send({ message: 'Internal server error' });
     }
   }

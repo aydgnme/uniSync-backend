@@ -81,14 +81,26 @@ export class UserService {
     }
   }
 
-  static async getUserByEmail(email: string): Promise<IUser | null> {
+  static async getUserByEmail(email: string, includePassword: boolean = false): Promise<IUser | null> {
     try {
-      const user = await User.findOne({ email });
-      if (!user) return null;
+      const normalizedEmail = email.toLowerCase().trim();
+      console.log('Searching for user with normalized email:', normalizedEmail);
+      
+      const query = User.findOne({ email: normalizedEmail });
+      if (!includePassword) {
+        query.select('-password');
+      }
+      
+      const user = await query;
+      if (!user) {
+        console.log('No user found with email:', normalizedEmail);
+        return null;
+      }
       
       console.log('User found by email:', {
         email: user.email,
-        passwordHash: user.password,
+        hasPassword: !!user.password,
+        passwordLength: user.password?.length,
         _id: user._id
       });
       
@@ -246,11 +258,20 @@ export class UserService {
   }
 
   private static mapToIUser(user: IUserDocument, firebaseData?: DocumentData): IUser {
-    const { _id, password, ...rest } = user.toObject();
+    const userObj = user.toObject();
     return {
-      ...rest,
-      _id: _id.toString(),
-      password,
+      _id: userObj._id.toString(),
+      email: userObj.email,
+      password: userObj.password,
+      cnp: userObj.cnp,
+      matriculationNumber: userObj.matriculationNumber,
+      name: userObj.name,
+      role: userObj.role,
+      phone: userObj.phone,
+      address: userObj.address,
+      academicInfo: userObj.academicInfo,
+      resetCode: userObj.resetCode,
+      resetCodeExpiry: userObj.resetCodeExpiry,
       firebaseData
     };
   }

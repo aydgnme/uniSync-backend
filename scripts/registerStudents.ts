@@ -16,6 +16,14 @@ function generatePhoneNumber(): string {
     return `${prefix}${number}`;
 }
 
+function calculateSemester(groupName: string): number {
+  // Grup numarasından yılı al (3. rakam)
+  const yearDigit = parseInt(groupName[2]);
+  
+  // Yıla göre dönemi hesapla (her yıl 2 dönem)
+  return yearDigit * 2;
+}
+
 async function registerStudent(index: number) {
   const groupName = allGroups[index % allGroups.length];
   const year = new Date().getFullYear().toString().slice(-2);
@@ -32,19 +40,23 @@ async function registerStudent(index: number) {
     cnp: faker.string.numeric(13),
     matriculationNumber,
     name: `${firstName} ${lastName}`,
+    role: 'Student',
     phone: generatePhoneNumber(),
     address: faker.location.streetAddress(),
-    program: 'Computer Science',
-    semester: faker.number.int({ min: 1, max: 8 }),
-    groupName,
-    subgroupIndex: faker.helpers.arrayElement(['a', 'b']),
-    advisor: `Prof. Dr. ${faker.person.fullName()}`,
-    gpa: parseFloat((Math.random() * 3 + 6).toFixed(2))
+    academicInfo: {
+      program: 'Computer Science',
+      semester: calculateSemester(groupName),
+      groupName,
+      subgroupIndex: faker.helpers.arrayElement(['a', 'b']),
+      studentId: matriculationNumber,
+      advisor: `Prof. Dr. ${faker.person.fullName()}`,
+      gpa: parseFloat((Math.random() * 3 + 6).toFixed(2))
+    }
   };
 
   try {
     const response = await axios.post(BASE_URL, student);
-    console.log(`✅ Registered: ${email} (${matriculationNumber}) in group ${groupName}`);
+    console.log(`✅ Registered: ${email} (${matriculationNumber}) in group ${groupName} - Semester ${student.academicInfo.semester}`);
     return true;
   } catch (error: any) {
     console.error(`❌ Failed: ${email}`, error.response?.data || error.message);

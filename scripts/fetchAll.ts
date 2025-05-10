@@ -18,7 +18,7 @@ async function runScript(scriptName: string) {
 async function main() {
   try {
     // Run scripts in sequence
-    await runScript('fetchFaculties.ts');
+   // await runScript('fetchFaculties.ts');
     await runScript('fetchGroups.ts');
     await runScript('fetchSchedules.ts');
 

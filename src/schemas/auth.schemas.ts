@@ -9,7 +9,7 @@ const passwordValidation = z
       'Password must be at least 8 characters long, contain at least one uppercase letter and one special character.'
   });
 
-// ✅ Register schema
+// Zod schemas for validation
 export const registerSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: passwordValidation,
@@ -30,19 +30,16 @@ export const registerSchema = z.object({
   path: ['confirmPassword']
 });
 
-// ✅ Login schema
 export const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(1, 'Password is required')
 });
 
-// ✅ Step 1: CNP + Matriculation
 export const generateResetCodeSchema = z.object({
   cnp: z.string().length(13, 'CNP must be 13 digits'),
   matriculationNumber: z.string().min(5, 'Matriculation number is required')
 });
 
-// ✅ Step 2: Email + ResetCode + New Password
 export const resetPasswordSchema = z.object({
   email: z.string().email('Invalid email address'),
   resetCode: z.string(),
@@ -53,7 +50,6 @@ export const resetPasswordSchema = z.object({
   path: ['confirmPassword']
 });
 
-// ✅ User schemas
 export const createUserSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
@@ -75,3 +71,71 @@ export const createUserSchema = z.object({
 });
 
 export const updateUserSchema = createUserSchema.partial();
+
+export const checkUserSchema = z.object({
+  email: z.string().email('Invalid email format'),
+  matriculationNumber: z.string().min(1, 'Matriculation number is required')
+});
+
+export const findUserSchema = z.object({
+  cnp: z.string().min(1, 'CNP is required'),
+  matriculationNumber: z.string().min(1, 'Matriculation number is required')
+});
+
+// OpenAPI schemas for documentation
+export const authSchemas = {
+  AuthResponse: {
+    type: 'object',
+    required: ['token', 'user'],
+    properties: {
+      token: { type: 'string' },
+      user: {
+        type: 'object',
+        properties: {
+          _id: { type: 'string' },
+          email: { type: 'string' },
+          name: { type: 'string' },
+          role: { type: 'string', enum: ['Student', 'Teacher', 'Admin'] }
+        }
+      }
+    }
+  },
+  LoginRequest: {
+    type: 'object',
+    required: ['email', 'password'],
+    properties: {
+      email: { type: 'string', format: 'email' },
+      password: { type: 'string', minLength: 1 }
+    }
+  },
+  RegisterRequest: {
+    type: 'object',
+    required: ['email', 'password', 'confirmPassword', 'cnp', 'matriculationNumber', 'name'],
+    properties: {
+      email: { type: 'string', format: 'email' },
+      password: { type: 'string', minLength: 8 },
+      confirmPassword: { type: 'string', minLength: 8 },
+      cnp: { type: 'string', minLength: 13, maxLength: 13 },
+      matriculationNumber: { type: 'string', minLength: 5 },
+      name: { type: 'string', minLength: 1 },
+      phone: { type: 'string' },
+      address: { type: 'string' },
+      program: { type: 'string' },
+      semester: { type: 'number' },
+      groupName: { type: 'string' },
+      subgroupIndex: { type: 'string' },
+      advisor: { type: 'string' },
+      gpa: { type: 'number' }
+    }
+  },
+  ResetPasswordRequest: {
+    type: 'object',
+    required: ['email', 'resetCode', 'newPassword', 'confirmPassword'],
+    properties: {
+      email: { type: 'string', format: 'email' },
+      resetCode: { type: 'string' },
+      newPassword: { type: 'string', minLength: 8 },
+      confirmPassword: { type: 'string', minLength: 8 }
+    }
+  }
+};

@@ -1,0 +1,783 @@
+{
+  "info": {
+    "name": "USV Portal API",
+    "description": "USV Portal Backend API Collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"user@example.com\",\n    \"password\": \"YourPassword123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"newuser@example.com\",\n    \"password\": \"YourPassword123!\",\n    \"confirmPassword\": \"YourPassword123!\",\n    \"cnp\": \"1234567890123\",\n    \"matriculationNumber\": \"12345\",\n    \"name\": \"New User\",\n    \"phone\": \"+40712345678\",\n    \"address\": \"Street Name, City\",\n    \"program\": \"Computer Science\",\n    \"semester\": 1,\n    \"groupName\": \"3141\",\n    \"subgroupIndex\": \"a\",\n    \"advisor\": \"Dr. Advisor\",\n    \"gpa\": 0\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Find User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"cnp\": \"1234567890123\",\n    \"matriculationNumber\": \"12345\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/find-user",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "find-user"]
+            }
+          }
+        },
+        {
+          "name": "Generate Reset Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"cnp\": \"1234567890123\",\n    \"matriculationNumber\": \"12345\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/generate-reset-code",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "generate-reset-code"]
+            }
+          }
+        },
+        {
+          "name": "Verify Reset Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"cnp\": \"1234567890123\",\n    \"matriculationNumber\": \"12345\",\n    \"code\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verify-reset-code",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "verify-reset-code"]
+            }
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"cnp\": \"1234567890123\",\n    \"matriculationNumber\": \"12345\",\n    \"code\": \"123456\",\n    \"newPassword\": \"NewPassword123!\",\n    \"confirmPassword\": \"NewPassword123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "reset-password"]
+            }
+          }
+        },
+        {
+          "name": "Check User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"user@example.com\",\n    \"matriculationNumber\": \"12345\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/check-user",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "check-user"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "profile"]
+            }
+          }
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "user_id_here"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users"]
+            }
+          }
+        },
+        {
+          "name": "Make User Admin",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/:id/make-admin",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", ":id", "make-admin"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "user_id_here"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Homework",
+      "item": [
+        {
+          "name": "Submit Homework",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/file"
+                },
+                {
+                  "key": "studentId",
+                  "value": "student_id_here",
+                  "type": "text"
+                },
+                {
+                  "key": "lectureId",
+                  "value": "lecture_id_here",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/homework/submit",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "homework", "submit"]
+            }
+          }
+        },
+        {
+          "name": "Get Homework by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/homework/:homeworkId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "homework", ":homeworkId"],
+              "variable": [
+                {
+                  "key": "homeworkId",
+                  "value": "homework_id_here"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Student's Homework",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/homework/student/:studentId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "homework", "student", ":studentId"],
+              "variable": [
+                {
+                  "key": "studentId",
+                  "value": "student_id_here"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Lecture's Homework",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/homework/lecture/:lectureId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "homework", "lecture", ":lectureId"],
+              "variable": [
+                {
+                  "key": "lectureId",
+                  "value": "lecture_id_here"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Grade Homework",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"grade\": 9,\n    \"feedback\": \"Great work!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/homework/:homeworkId/grade",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "homework", ":homeworkId", "grade"],
+              "variable": [
+                {
+                  "key": "homeworkId",
+                  "value": "homework_id_here"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Files",
+      "item": [
+        {
+          "name": "Upload File",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/files/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "files", "upload"]
+            }
+          }
+        },
+        {
+          "name": "Download File",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/files/:fileId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "files", ":fileId"],
+              "variable": [
+                {
+                  "key": "fileId",
+                  "value": "file_id_here"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete File",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/files/:fileId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "files", ":fileId"],
+              "variable": [
+                {
+                  "key": "fileId",
+                  "value": "file_id_here"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get File Info",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/files/:fileId/info",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "files", ":fileId", "info"],
+              "variable": [
+                {
+                  "key": "fileId",
+                  "value": "file_id_here"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Course Grades",
+      "item": [
+        {
+          "name": "Get Student Grades",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/course-grades/student/:studentId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "course-grades", "student", ":studentId"],
+              "variable": [
+                {
+                  "key": "studentId",
+                  "value": "student_id_here"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Grade",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"studentId\": \"student_id_here\",\n    \"courseId\": \"course_id_here\",\n    \"grade\": 9\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/course-grades",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "course-grades"]
+            }
+          }
+        },
+        {
+          "name": "Update Grade",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"grade\": 10\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/course-grades/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "course-grades", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "grade_id_here"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Schedule",
+      "item": [
+        {
+          "name": "Get Schedule",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/schedule/:group/:subgroup",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "schedule", ":group", ":subgroup"],
+              "variable": [
+                {
+                  "key": "group",
+                  "value": "group_name_here"
+                },
+                {
+                  "key": "subgroup",
+                  "value": "subgroup_name_here"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Weekly Schedule",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/schedule/:group/:subgroup/:weekNumber",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "schedule", ":group", ":subgroup", ":weekNumber"],
+              "variable": [
+                {
+                  "key": "group",
+                  "value": "group_name_here"
+                },
+                {
+                  "key": "subgroup",
+                  "value": "subgroup_name_here"
+                },
+                {
+                  "key": "weekNumber",
+                  "value": "1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Monthly Schedule",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/schedule/:group/:subgroup/month/:month",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "schedule", ":group", ":subgroup", "month", ":month"],
+              "variable": [
+                {
+                  "key": "group",
+                  "value": "group_name_here"
+                },
+                {
+                  "key": "subgroup",
+                  "value": "subgroup_name_here"
+                },
+                {
+                  "key": "month",
+                  "value": "1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get All Subgroups",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/schedule/subgroups",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "schedule", "subgroups"]
+            }
+          }
+        },
+        {
+          "name": "Get Today Schedule",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/schedule/today/:group/:subgroup",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "schedule", "today", ":group", ":subgroup"],
+              "variable": [
+                {
+                  "key": "group",
+                  "value": "group_name_here"
+                },
+                {
+                  "key": "subgroup",
+                  "value": "subgroup_name_here"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test",
+      "item": [
+        {
+          "name": "Test Firebase Connection",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/test/firebase/connection",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "test", "firebase", "connection"]
+            }
+          }
+        },
+        {
+          "name": "List Firebase Collections",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/test/firebase/collections",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "test", "firebase", "collections"]
+            }
+          }
+        },
+        {
+          "name": "Get Collection Documents",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/test/firebase/collections/:collectionName",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "test", "firebase", "collections", ":collectionName"],
+              "variable": [
+                {
+                  "key": "collectionName",
+                  "value": "collection_name_here"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "token",
+      "value": "your_jwt_token_here"
+    }
+  ]
+} 
