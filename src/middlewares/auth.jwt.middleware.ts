@@ -1,12 +1,44 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { User } from '../models/user.model';
-import { config } from '../config';
-import { logger } from '../utils/logger';
+import { config } from '../config/index';
+import { logger } from '../utils/index';
+
+// JWT payload tipi tanımı
+interface JWTPayload {
+  tokenType: string;
+  user: {
+    userId: string;
+    email: string;
+    role: string;
+  };
+}
 
 // Rate limiting için basit bir cache
 const rateLimit = new Map<string, { count: number; timestamp: number }>();
 const RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15 dakika
 const MAX_REQUESTS = 100; // 15 dakikada maksimum istek sayısı
+
+export const verifyJWT = async (request: FastifyRequest, reply: FastifyReply) => {
+  try {
+    const payload = await request.jwtVerify<JWTPayload>();
+    
+    if (!payload) {
+      throw new Error('Invalid token payload');
+    }
+
+    if (payload.tokenType !== config.tokenTypes.access) {
+      throw new Error('Invalid token type');
+    }
+
+    request.user = {
+      tokenType: payload.tokenType,
+      user: payload.user
+    };
+  } catch (error) {
+    logger.error('JWT verification failed', error);
+    return reply.status(401).send({ error: 'Unauthorized' });
+  }
+};
 
 export async function authJWT(
   request: FastifyRequest,
@@ -55,7 +87,7 @@ export async function authJWT(
     }
 
     // JWT doğrulama
-    const decoded = await request.jwtVerify();
+    const decoded = await request.jwtVerify<JWTPayload>();
     
     // Token tipi kontrolü
     if (decoded.tokenType !== config.tokenTypes.access) {
@@ -67,7 +99,7 @@ export async function authJWT(
 
     // Kullanıcı kontrolü
     const user = await User.findOne({ 
-      userId: decoded.user.userId,
+      _id: decoded.user.userId,
       isActive: true // Aktif kullanıcı kontrolü
     });
     
@@ -80,9 +112,12 @@ export async function authJWT(
 
     // Kullanıcı bilgilerini request'e ekle
     request.user = {
-      userId: user.userId,
-      email: user.email,
-      role: user.role
+      tokenType: config.tokenTypes.access,
+      user: {
+        userId: user._id.toString(),
+        email: user.email,
+        role: user.role
+      }
     };
 
     // Security headers

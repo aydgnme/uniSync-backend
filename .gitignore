@@ -12,6 +12,7 @@ out/
 
 # Environment variables
 .env
+<<<<<<< HEAD
 .env.*
 !.env.example
 .env.local
@@ -130,3 +131,7 @@ temp/
 *.tmp
 *.temp
 .DS_Store
+=======
+*.log
+serviceAccountKey.json
+>>>>>>> main

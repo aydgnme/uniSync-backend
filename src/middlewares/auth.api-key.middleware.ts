@@ -7,6 +7,25 @@ const rateLimit = new Map<string, { count: number; timestamp: number }>();
 const RATE_LIMIT_WINDOW = 60 * 60 * 1000; // 1 saat
 const MAX_REQUESTS = 1000; // 1 saatte maksimum istek sayısı
 
+export const verifyApiKey = async (request: FastifyRequest, reply: FastifyReply) => {
+  try {
+    const apiKey = request.headers['x-api-key'];
+    if (!apiKey) {
+      throw new Error('API key is required');
+    }
+
+    const key = await ApiKey.findOne({ key: apiKey, isActive: true });
+    if (!key) {
+      throw new Error('Invalid API key');
+    }
+
+    request.apiKey = key;
+  } catch (error) {
+    logger.error('API key verification failed', error);
+    return reply.status(401).send({ error: 'Unauthorized' });
+  }
+};
+
 export async function authApiKey(
   request: FastifyRequest,
   reply: FastifyReply
