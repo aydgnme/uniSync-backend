@@ -3,10 +3,18 @@ import { UserService } from '../services/user.service';
 import { createUserSchema, updateUserSchema } from '../schemas/auth.schemas';
 
 export class UserController {
-  static async getAllUsers(_: FastifyRequest, reply: FastifyReply) {
+  static async getAllUsers(request: FastifyRequest, reply: FastifyReply) {
     try {
+      if (!request.user || (request.user as any).role !== 'admin') {
+        return reply.code(403).send({
+          message: 'Access denied',
+          code: 'FORBIDDEN',
+          statusCode: 403
+        });
+      }
+
       const users = await UserService.getAllUsers();
-      return reply.code(200).send(users);
+      return reply.code(200).send({ users });
     } catch (error: unknown) {
       console.error('Error fetching users:', error);
       return reply.code(500).send({
@@ -21,10 +29,35 @@ export class UserController {
     reply: FastifyReply
   ) {
     try {
+      if (!request.user) {
+        return reply.code(401).send({
+          message: 'Unauthorized',
+          code: 'UNAUTHORIZED',
+          statusCode: 401
+        });
+      }
+
+      // Check if user is admin or requesting their own profile
+      const isAdmin = (request.user as any).role === 'admin';
+      const isOwnProfile = (request.user as any)._id === request.params.id;
+
+      if (!isAdmin && !isOwnProfile) {
+        return reply.code(403).send({
+          message: 'Access denied',
+          code: 'FORBIDDEN',
+          statusCode: 403
+        });
+      }
+
       const user = await UserService.getUserById(request.params.id);
       if (!user) {
-        return reply.code(404).send({ message: 'User not found' });
+        return reply.code(404).send({
+          message: 'User not found',
+          code: 'NOT_FOUND',
+          statusCode: 404
+        });
       }
+
       return reply.code(200).send(user);
     } catch (error: unknown) {
       console.error('Error fetching user:', error);
@@ -107,6 +140,30 @@ export class UserController {
         message: 'Error deleting user',
         error: error instanceof Error ? error.message : 'Unknown error'
       });
+    }
+  }
+
+  static async updateUserRole(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
+    try {
+      const userId = request.params.id;
+      const updatedUser = await UserService.updateUser(userId, { role: 'Admin' });
+      
+      if (!updatedUser) {
+        return reply.code(404).send({ message: 'User not found' });
+      }
+
+      return reply.code(200).send({ 
+        message: 'User role updated successfully',
+        user: {
+          _id: updatedUser._id,
+          email: updatedUser.email,
+          name: updatedUser.name,
+          role: updatedUser.role
+        }
+      });
+    } catch (error) {
+      console.error('Update user role error:', error);
+      return reply.code(500).send({ message: 'Internal server error' });
     }
   }
 

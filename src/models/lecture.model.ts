@@ -1,4 +1,19 @@
-import { Schema, model } from 'mongoose';
+import { Schema, model, Document } from 'mongoose';
+
+export interface ILectureDocument extends Document {
+  code: string;
+  title: string;
+  type: 'LECTURE' | 'LAB' | 'SEMINAR';
+  room: string;
+  teacher: string;
+  weekDay: number;
+  startHour: string;
+  duration: number;
+  weeks: number[];
+  parity: 'ODD' | 'EVEN' | 'ALL';
+  group: string;
+  subgroup: string;
+}
 
 const LectureSchema = new Schema({
   code: { type: String, required: true },
@@ -15,4 +30,4 @@ const LectureSchema = new Schema({
   subgroup: { type: String, required: true },
 });
 
-export const Lecture = model('Lecture', LectureSchema);
+export const Lecture = model<ILectureDocument>('Lecture', LectureSchema);

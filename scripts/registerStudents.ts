@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { faker } from '@faker-js/faker';
 
-const BASE_URL = 'http://localhost:3000/users/';
+const BASE_URL = 'http://localhost:3000/api/users';
 
 const allGroups = [
   '3111', '3112', '3113', '3114',
@@ -16,8 +16,18 @@ function generatePhoneNumber(): string {
     return `${prefix}${number}`;
 }
 
+function calculateSemester(groupName: string): number {
+  // Grup numarasından yılı al (3. rakam)
+  const yearDigit = parseInt(groupName[2]);
+  
+  // Yıla göre dönemi hesapla (her yıl 2 dönem)
+  return yearDigit * 2;
+}
+
 async function registerStudent(index: number) {
   const groupName = allGroups[index % allGroups.length];
+  const year = new Date().getFullYear().toString().slice(-2);
+  const matriculationNumber = `${year}${(30000 + index).toString().padStart(5, '0')}`;
 
   const firstName = faker.person.firstName();
   const lastName = faker.person.lastName();
@@ -25,19 +35,20 @@ async function registerStudent(index: number) {
 
   const student = {
     email,
-    password: 'Student@123',
+    password: 'Student@123!',
+    confirmPassword: 'Student@123!',
     cnp: faker.string.numeric(13),
-    matriculationNumber: (20000 + index).toString(),
+    matriculationNumber,
     name: `${firstName} ${lastName}`,
     role: 'Student',
     phone: generatePhoneNumber(),
     address: faker.location.streetAddress(),
     academicInfo: {
       program: 'Computer Science',
-      semester: faker.number.int({ min: 1, max: 8 }),
+      semester: calculateSemester(groupName),
       groupName,
       subgroupIndex: faker.helpers.arrayElement(['a', 'b']),
-      studentId: (20000 + index).toString(),
+      studentId: matriculationNumber,
       advisor: `Prof. Dr. ${faker.person.fullName()}`,
       gpa: parseFloat((Math.random() * 3 + 6).toFixed(2))
     }
@@ -45,17 +56,26 @@ async function registerStudent(index: number) {
 
   try {
     const response = await axios.post(BASE_URL, student);
-    console.log(`✅ Registered: ${email} in group ${groupName}`);
+    console.log(`✅ Registered: ${email} (${matriculationNumber}) in group ${groupName} - Semester ${student.academicInfo.semester}`);
+    return true;
   } catch (error: any) {
     console.error(`❌ Failed: ${email}`, error.response?.data || error.message);
+    return false;
   }
 }
 
+async function main() {
+  const numberOfStudents = 100;
+  let successCount = 0;
+  
+  for (let i = 0; i < numberOfStudents; i++) {
+    const success = await registerStudent(i);
+    if (success) successCount++;
+    // Her kayıt arasında kısa bir bekleme süresi ekleyelim
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
 
-async function registerMany(count: number) {
-  const promises = Array.from({ length: count }, (_, i) => registerStudent(i + 1));
-  await Promise.all(promises);
-  console.log(`🎓 Finished registering ${count} students.`);
+  console.log(`🎓 Finished registering students. Success: ${successCount}/${numberOfStudents}`);
 }
 
-registerMany(1000);
+main().catch(console.error);
