@@ -1,10 +1,20 @@
 import 'fastify';
 import { FastifyRequest } from 'fastify';
 import { ApiKey } from '../models/api-key.model';
+import { User } from '../models/user.model';
 
 declare module 'fastify' {
   interface FastifyInstance {
     multipartHandler: (req: any, reply: any) => Promise<void>;
+  }
+
+  interface FastifyRequest {
+    user?: {
+      userId: string;
+      email: string;
+      role: string;
+    };
+    apiKey?: ApiKey;
   }
 }
 // Removed the declaration for '@fastify/type-provider-typebox' due to the error
@@ -22,13 +32,15 @@ declare module 'pino-pretty' {
   }
 }
 
-declare module 'fastify' {
-  interface FastifyRequest {
-    user?: {
-      userId: string;
-      email: string;
-      role: string;
+declare module '@fastify/jwt' {
+  interface FastifyJWT {
+    payload: {
+      tokenType: string;
+      user: {
+        userId: string;
+        email: string;
+        role: string;
+      };
     };
-    apiKey?: ApiKey;
   }
 }

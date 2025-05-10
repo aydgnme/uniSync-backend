@@ -102,9 +102,12 @@ export const AuthController = {
       }
 
       const token = request.server.jwt.sign({ 
-        userId: user._id,
-        email: user.email,
-        role: user.role || 'Student'
+        tokenType: 'access',
+        user: {
+          userId: user._id,
+          email: user.email,
+          role: user.role || 'Student'
+        }
       });
 
       console.log('Login successful for user:', user.email);
@@ -345,8 +348,12 @@ export const AuthController = {
       });
 
       const token = request.server.jwt.sign({ 
-        userId: user._id,
-        email: user.email
+        tokenType: 'access',
+        user: {
+          userId: user._id,
+          email: user.email,
+          role: user.role
+        }
       });
 
       return reply.code(201).send({ 
