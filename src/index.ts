@@ -2,6 +2,10 @@ import dotenv from 'dotenv';
 import { connectToMongoDB } from './database/mongo';
 import { initializeFirebase } from './config/firebase.config';
 import { buildServer } from './app/index';
+import fastify from 'fastify';
+import fastifySwagger from '@fastify/swagger';
+import fastifySwaggerUi from '@fastify/swagger-ui';
+import scheduleRoutes from './routes/schedule.routes';
 
 // Load environment variables
 dotenv.config();
@@ -16,6 +20,48 @@ process.on('unhandledRejection', (error) => {
   console.error('Unhandled Rejection:', error);
   process.exit(1);
 });
+
+const server = fastify({
+  logger: true
+});
+
+// Swagger configuration
+server.register(fastifySwagger, {
+  swagger: {
+    info: {
+      title: 'USV Portal API',
+      description: 'USV Portal Backend API Documentation',
+      version: '1.0.0'
+    },
+    tags: [
+      { name: 'Schedule', description: 'Schedule related endpoints' }
+    ],
+    securityDefinitions: {
+      bearerAuth: {
+        type: 'apiKey',
+        name: 'Authorization',
+        in: 'header'
+      }
+    }
+  }
+});
+
+server.register(fastifySwaggerUi, {
+  routePrefix: '/documentation',
+  uiConfig: {
+    docExpansion: 'full',
+    deepLinking: false
+  },
+  uiHooks: {
+    onRequest: function (request, reply, next) { next(); },
+    preHandler: function (request, reply, next) { next(); }
+  },
+  staticCSP: true,
+  transformStaticCSP: (header) => header
+});
+
+// Routes
+server.register(scheduleRoutes, { prefix: '/api/schedule' });
 
 const start = async () => {
   try {

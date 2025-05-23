@@ -13,6 +13,7 @@ declare module 'fastify' {
       userId: string;
       email: string;
       role: string;
+      matriculationNumber: string;
     };
     apiKey?: ApiKey;
   }
@@ -40,7 +41,16 @@ declare module '@fastify/jwt' {
         userId: string;
         email: string;
         role: string;
+        matriculationNumber: string;
       };
+      iat?: number;
+      exp?: number;
+    };
+    user: {
+      userId: string;
+      email: string;
+      role: string;
+      matriculationNumber: string;
     };
   }
 }

@@ -17,13 +17,15 @@ export async function registerUser(body: any): Promise<IUser> {
     phone: body.phone || '',
     address: body.address || '',
     academicInfo: {
-      program: body.program || 'Computer Science',
-      semester: body.semester || 8,
-      groupName: body.groupName || '3141',
-      subgroupIndex: body.subgroupIndex || 'a',
+      program: body.academicInfo?.program || 'Computer Science',
+      semester: body.academicInfo?.semester || 8,
+      groupName: body.academicInfo?.groupName || '3141',
+      subgroupIndex: body.academicInfo?.subgroupIndex || 'a',
       studentId: body.matriculationNumber,
-      advisor: body.advisor || 'Unknown',
-      gpa: body.gpa || 0
+      advisor: body.academicInfo?.advisor || 'Unknown',
+      gpa: body.academicInfo?.gpa || 0,
+      facultyId: body.academicInfo?.facultyId || '',
+      specializationShortName: body.academicInfo?.specializationShortName || ''
     }
   };
 

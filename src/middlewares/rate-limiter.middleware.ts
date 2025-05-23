@@ -3,7 +3,7 @@ import { FastifyInstance } from 'fastify';
 
 const globalRateLimiter = async (app: FastifyInstance) => {
   await app.register(rateLimit, {
-    max: 100, // Mobil IP karmaşası düşünülerek artırıldı
+    max: 100, // Increased due to mobile IP complexity
     timeWindow: '1 minute',
     keyGenerator: (req) => req.ip,
     errorResponseBuilder: () => ({

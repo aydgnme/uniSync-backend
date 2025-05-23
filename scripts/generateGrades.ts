@@ -35,8 +35,9 @@ async function generateGrades() {
 
       // Find student's lectures
       const lectures = await Lecture.find({
-        group: groupName,
-        subgroup: subgroupIndex
+        groupId: academicInfo.groupId,
+        groupName: groupName,
+        subgroupIndex: subgroupIndex
       });
 
       // Create grade for each lecture
@@ -72,7 +73,8 @@ async function generateGrades() {
           finalGrade,
           totalGrade,
           status,
-          studentId: student.matriculationNumber
+          studentId: student.matriculationNumber,
+          studyYear: lecture.studyYear
         });
 
         await grade.save();

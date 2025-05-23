@@ -53,7 +53,7 @@ export class PasswordResetService {
       if (!resetData) return false;
       if (resetData.expiresAt < new Date()) return false;
     
-      // UserService kullanarak şifre güncelleme
+      // Update password using UserService
       const updatedUser = await UserService.updatePasswordByCnpAndMatriculation(
         cnp,
         matriculationNumber,

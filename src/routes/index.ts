@@ -6,6 +6,7 @@ import scheduleRoutes from './schedule.routes';
 import courseGradeRoutes from './course-grade.routes';
 import gridfsRoutes from './gridfs.routes';
 import homeworkRoutes from './homework.routes';
+import { classroomRoutes } from './classroom.routes';
 
 export async function registerRoutes(fastify: FastifyInstance) {
   // Register all routes under /api prefix
@@ -17,6 +18,7 @@ export async function registerRoutes(fastify: FastifyInstance) {
     fastify.register(courseGradeRoutes, { prefix: '/course-grades' });
     fastify.register(gridfsRoutes, { prefix: '/files' });
     fastify.register(homeworkRoutes, { prefix: '/homework' });
+    fastify.register(classroomRoutes, { prefix: '/classroom' });
   }, { prefix: '/api' });
 }
 
@@ -27,5 +29,6 @@ export {
   scheduleRoutes,
   courseGradeRoutes,
   gridfsRoutes,
-  homeworkRoutes
+  homeworkRoutes,
+  classroomRoutes
 };

@@ -9,6 +9,21 @@ const passwordValidation = z
       'Password must be at least 8 characters long, contain at least one uppercase letter and one special character.'
   });
 
+const academicInfoSchema = z.object({
+  program: z.string(),
+  semester: z.number(),
+  studyYear: z.number().default(1),
+  groupName: z.string(),
+  subgroupIndex: z.string().default(''),
+  studentId: z.string(),
+  advisor: z.string(),
+  gpa: z.number(),
+  specializationShortName: z.string(),
+  facultyId: z.string(),
+  groupId: z.string().optional(),
+  isModular: z.boolean().default(false)
+});
+
 // Zod schemas for validation
 export const registerSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -19,12 +34,7 @@ export const registerSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   phone: z.string(),
   address: z.string(),
-  program: z.string(),
-  semester: z.coerce.number(),
-  groupName: z.string(),
-  subgroupIndex: z.string(),
-  advisor: z.string(),
-  gpa: z.coerce.number()
+  academicInfo: academicInfoSchema
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ['confirmPassword']
@@ -51,26 +61,28 @@ export const resetPasswordSchema = z.object({
 });
 
 export const createUserSchema = z.object({
+  name: z.string(),
   email: z.string().email(),
   password: z.string().min(6),
-  cnp: z.string().length(13),
+  cnp: z.string(),
   matriculationNumber: z.string(),
-  name: z.string(),
   role: z.enum(['Student', 'Teacher', 'Admin']),
   phone: z.string(),
   address: z.string(),
-  academicInfo: z.object({
-    program: z.string(),
-    semester: z.number(),
-    groupName: z.string(),
-    subgroupIndex: z.string(),
-    studentId: z.string(),
-    advisor: z.string(),
-    gpa: z.number()
-  })
+  academicInfo: academicInfoSchema
 });
 
-export const updateUserSchema = createUserSchema.partial();
+export const updateUserSchema = z.object({
+  name: z.string().optional(),
+  email: z.string().email().optional(),
+  password: z.string().min(6).optional(),
+  cnp: z.string().optional(),
+  matriculationNumber: z.string().optional(),
+  role: z.enum(['Student', 'Teacher', 'Admin']).optional(),
+  phone: z.string().optional(),
+  address: z.string().optional(),
+  academicInfo: academicInfoSchema.optional()
+});
 
 export const checkUserSchema = z.object({
   email: z.string().email('Invalid email format'),
@@ -125,7 +137,8 @@ export const authSchemas = {
       groupName: { type: 'string' },
       subgroupIndex: { type: 'string' },
       advisor: { type: 'string' },
-      gpa: { type: 'number' }
+      gpa: { type: 'number' },
+      specializationShortName: { type: 'string' }
     }
   },
   ResetPasswordRequest: {

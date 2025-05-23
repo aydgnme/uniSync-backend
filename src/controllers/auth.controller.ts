@@ -57,7 +57,9 @@ const registerSchema = z.object({
     groupName: z.string(),
     subgroupIndex: z.string(),
     advisor: z.string(),
-    gpa: z.number()
+    gpa: z.number(),
+    specializationShortName: z.string(),
+    facultyId: z.string()
   })
 });
 
@@ -104,7 +106,7 @@ export const AuthController = {
       const token = request.server.jwt.sign({ 
         tokenType: 'access',
         user: {
-          userId: user._id,
+          userId: user._id.toString(),
           email: user.email,
           role: user.role || 'Student'
         }

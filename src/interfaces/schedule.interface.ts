@@ -1,21 +1,48 @@
 import { Document } from "mongoose";
 
-export interface ISchedule extends Document {
-  group: string;        // e.g., "3141"
-  subgroup: string;     // e.g., "a"
-  weekDay: number;      // 1 (Monday) - 7 (Sunday)
-  startHour: string;    // "08:00"
-  duration: number;     // in minutes
-  code: string;         // e.g., "RF"
-  title: string;        // e.g., "Recunoaşterea formelor"
-  type: "LECTURE" | "LAB" | "SEMINAR"; // (not CURS, standardizing)
-  room: string;         // e.g., "D Amf. DH"
-  teacher: string;      // e.g., "Pentiuc Ş."
-  parity: "ODD" | "EVEN" | "BOTH"; // Which weeks it belongs to
+export interface ISchedule {
+  facultyId: string;
+  groupId: string;
+  groupName: string;
+  subgroupIndex?: string;
+  specializationShortName: string;
+  studyYear: number;
+  isModular: boolean;
+  weekNumber: number;
+  parity: "ODD" | "EVEN" | "ALL";
+  courses: Array<{
+    id: string;
+    code: string;
+    title: string;
+    type: "LECTURE" | "LAB" | "SEMINAR";
+    startTime: string;
+    endTime: string;
+    duration: number;
+    room: string;
+    teacher: string;
+    weekDay: number;
+  }>;
 }
 
 export interface GetWeeklyScheduleParams {
-  group: string;
-  subgroup: string;
+  facultyId: string;
+  specializationShortName: string;
+  groupName: string;
+  subgroupIndex?: string;
   weekNumber: string;
+}
+
+export interface GetMonthlyScheduleParams {
+  facultyId: string;
+  specializationShortName: string;
+  groupName: string;
+  subgroupIndex?: string;
+  month: string;
+}
+
+export interface GetTodayScheduleParams {
+  facultyId: string;
+  specializationShortName: string;
+  groupName: string;
+  subgroupIndex?: string;
 }

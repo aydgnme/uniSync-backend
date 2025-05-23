@@ -17,8 +17,12 @@ export const userSchemas = {
           semester: { type: 'number' },
           groupName: { type: 'string' },
           subgroupIndex: { type: 'string' },
+          studentId: { type: 'string' },
           advisor: { type: 'string' },
-          gpa: { type: 'number' }
+          gpa: { type: 'number' },
+          specializationShortName: { type: 'string' },
+          facultyId: { type: 'string' },
+          groupId: { type: 'string' }
         }
       }
     }

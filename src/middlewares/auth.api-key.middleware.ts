@@ -2,10 +2,10 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import ApiKey from '../models/api-key.model';
 import { logger } from '../utils/logger';
 
-// Rate limiting için basit bir cache
+// Simple cache for rate limiting
 const rateLimit = new Map<string, { count: number; timestamp: number }>();
-const RATE_LIMIT_WINDOW = 60 * 60 * 1000; // 1 saat
-const MAX_REQUESTS = 1000; // 1 saatte maksimum istek sayısı
+const RATE_LIMIT_WINDOW = 60 * 60 * 1000; // 1 hour
+const MAX_REQUESTS = 1000; // Maximum requests per hour
 
 export const verifyApiKey = async (request: FastifyRequest, reply: FastifyReply) => {
   try {
@@ -31,7 +31,7 @@ export async function authApiKey(
   reply: FastifyReply
 ) {
   try {
-    // Rate limiting kontrolü
+    // Rate limiting check
     const clientIP = request.ip;
     const now = Date.now();
     const clientRateLimit = rateLimit.get(clientIP);
@@ -52,7 +52,7 @@ export async function authApiKey(
       rateLimit.set(clientIP, { count: 1, timestamp: now });
     }
 
-    // API Key kontrolü
+    // API Key check
     const apiKey = request.headers['x-api-key'];
     if (!apiKey || typeof apiKey !== 'string') {
       return reply.code(401).send({
@@ -61,7 +61,7 @@ export async function authApiKey(
       });
     }
 
-    // API Key formatı kontrolü (UUID v4 formatı)
+    // API Key format check (UUID v4 format)
     const uuidV4Regex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!uuidV4Regex.test(apiKey)) {
       return reply.code(401).send({
@@ -70,11 +70,11 @@ export async function authApiKey(
       });
     }
 
-    // API Key doğrulama
+    // API Key validation
     const key = await ApiKey.findOne({ 
       key: apiKey,
       isActive: true,
-      expiresAt: { $gt: new Date() } // Süresi dolmamış
+      expiresAt: { $gt: new Date() } // Not expired
     });
 
     if (!key) {
@@ -84,7 +84,7 @@ export async function authApiKey(
       });
     }
 
-    // Kullanım limiti kontrolü
+    // Usage limit check
     if (key.usageLimit && key.usageCount >= key.usageLimit) {
       return reply.code(429).send({
         message: 'API key usage limit exceeded',
@@ -92,7 +92,7 @@ export async function authApiKey(
       });
     }
 
-    // Kullanım sayısını artır
+    // Increment usage count
     await ApiKey.updateOne(
       { _id: key._id },
       { $inc: { usageCount: 1 } }
@@ -110,7 +110,7 @@ export async function authApiKey(
   } catch (error) {
     logger.error('API Key Authentication error:', error);
     
-    // Güvenlik için genel hata mesajı
+    // Generic error message for security
     return reply.code(500).send({
       message: 'Internal server error',
       code: 'INTERNAL_SERVER_ERROR'

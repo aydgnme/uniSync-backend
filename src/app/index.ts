@@ -31,7 +31,24 @@ const buildServer = async (): Promise<FastifyInstance> => {
   await app.register(jwt, {
     secret: process.env.JWT_SECRET || 'your-secret-key',
     sign: {
-      expiresIn: '24h'
+      expiresIn: '24h',
+      algorithm: 'HS256',
+      iss: 'usv-portal',
+      aud: 'usv-portal-users'
+    },
+    verify: {
+      extractToken: (request) => {
+        const authHeader = request.headers.authorization || request.headers['x-auth-token'];
+        if (!authHeader || typeof authHeader !== 'string') {
+          return undefined;
+        }
+        return authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : authHeader;
+      },
+      maxAge: '24h'
+    },
+    cookie: {
+      cookieName: 'token',
+      signed: false
     }
   });
 

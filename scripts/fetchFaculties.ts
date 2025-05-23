@@ -1,26 +1,56 @@
-import axios from 'axios';
-import { Faculty } from '../src/models';
 import { connectToMongoDB } from '../src/database/mongo';
+import { Faculty } from '../src/models/faculty.model';
+import axios from 'axios';
 
-async function fetchFaculties() {
-  await connectToMongoDB();
-  const response = await axios.get('https://orar.usv.ro/orar/vizualizare/data/facultati.php?json');
-  const faculties = response.data;
+const ORAR_API_URL = 'https://orar.usv.ro/orar/vizualizare';
 
-  // Clear existing faculties
-  await Faculty.deleteMany({});
-  console.log('Cleared existing faculties.');
-  console.log(`Fetched ${faculties.length} faculties from the API.`);
-  
-
-  for (const faculty of faculties) {
-    if (faculty.id !== '0') {
-      await Faculty.updateOne({ id: faculty.id }, faculty, { upsert: true });
-    }
-  }
-
-  console.log('Faculties fetched and saved.');
-  process.exit(0);
+interface OrarFaculty {
+  id: string;
+  longName: string;
+  shortName: string;
 }
 
-fetchFaculties();
+export async function fetchFaculties() {
+  try {
+    await connectToMongoDB();
+    console.log('Connected to MongoDB');
+
+    // Fetch faculties from Orar API
+    const response = await axios.get(`${ORAR_API_URL}/data/facultati.php?json`);
+    const faculties: OrarFaculty[] = response.data;
+
+    console.log('API Response:', JSON.stringify(faculties, null, 2));
+
+    // Clear existing faculties
+    await Faculty.deleteMany({});
+    console.log('Cleared existing faculties');
+
+    // Insert new faculties
+    const facultyData = faculties
+      .filter(faculty => faculty.id !== '0' && faculty.shortName && faculty.longName)
+      .map(faculty => ({
+        id: faculty.id,
+        longName: faculty.longName.trim(),
+        shortName: faculty.shortName.trim()
+      }));
+
+    if (facultyData.length === 0) {
+      throw new Error('No valid faculty data found in API response');
+    }
+
+    await Faculty.insertMany(facultyData);
+    console.log(`Inserted ${facultyData.length} faculties`);
+
+    return facultyData;
+  } catch (error) {
+    console.error('Error:', error);
+    throw error;
+  }
+}
+
+// Run if called directly
+if (require.main === module) {
+  fetchFaculties()
+    .then(() => process.exit(0))
+    .catch(() => process.exit(1));
+}

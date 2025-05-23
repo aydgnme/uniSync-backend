@@ -1,139 +1,107 @@
 import { FastifyInstance } from 'fastify';
-import { schemas } from '../schemas';
-import {
-  submitHomework,
-  getHomework,
-  getStudentHomeworks,
-  getLectureHomeworks,
-  gradeHomework
-} from '../controllers/homework.controller';
+import { HomeworkController } from '../controllers/homework.controller';
 
 export default async function homeworkRoutes(fastify: FastifyInstance) {
-  // Submit homework
-  fastify.post<{
-    Body: {
-      file: {
-        buffer: Buffer;
-        filename: string;
-        mimetype: string;
-      };
-      studentId: string;
-      lectureId: string;
-    };
-  }>('/submit', {
+  const homeworkController = new HomeworkController();
+
+  // Get all homeworks
+  fastify.get('/', {
     schema: {
       tags: ['Homework'],
-      summary: 'Submit homework',
-      description: 'Submit a new homework file for a specific lecture',
-      security: [{ bearerAuth: [] }],
-      consumes: ['multipart/form-data'],
-      body: {
-        type: 'object',
-        required: ['file', 'studentId', 'lectureId'],
-        properties: {
-          file: {
+      summary: 'Get all homeworks',
+      description: 'Retrieve a list of all homeworks with their lecture and student information',
+      response: {
+        200: {
+          type: 'array',
+          items: {
             type: 'object',
             properties: {
-              buffer: { type: 'string', format: 'binary' },
-              filename: { type: 'string' },
-              mimetype: { type: 'string' }
+              _id: { type: 'string' },
+              lecture: { type: 'object' },
+              lectureCode: { type: 'string' },
+              group: { type: 'string' },
+              subgroup: { type: 'string' },
+              title: { type: 'string' },
+              description: { type: 'string' },
+              dueDate: { type: 'string', format: 'date-time' },
+              isUnlimited: { type: 'boolean' },
+              student: { type: 'object' },
+              fileId: { type: 'string' },
+              fileName: { type: 'string' },
+              submittedAt: { type: 'string', format: 'date-time' },
+              status: { type: 'string', enum: ['pending', 'submitted', 'graded'] },
+              grade: { type: 'number' },
+              feedback: { type: 'string' }
             }
-          },
-          studentId: { type: 'string' },
-          lectureId: { type: 'string' }
-        }
-      },
-      response: {
-        201: {
-          description: 'Homework successfully submitted',
-          type: 'object',
-          properties: {
-            message: { type: 'string' },
-            homeworkId: { type: 'string' },
-            fileId: { type: 'string' },
-            studentInfo: { $ref: 'User' },
-            lectureInfo: { $ref: 'Lecture' }
           }
         },
-        400: { $ref: 'Error' },
-        401: { $ref: 'Error' },
-        404: { $ref: 'Error' }
+        500: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' }
+          }
+        }
       }
     }
-  }, submitHomework);
+  }, homeworkController.getAllHomeworks);
 
   // Get homework by ID
-  fastify.get<{
-    Params: { homeworkId: string };
-  }>('/:homeworkId', {
+  fastify.get('/:id', {
     schema: {
       tags: ['Homework'],
       summary: 'Get homework by ID',
-      description: 'Retrieve homework details by its ID',
-      security: [{ bearerAuth: [] }],
+      description: 'Retrieve a specific homework by its ID',
       params: {
         type: 'object',
-        required: ['homeworkId'],
+        required: ['id'],
         properties: {
-          homeworkId: { type: 'string' }
+          id: { type: 'string' }
         }
       },
       response: {
         200: {
-          description: 'Homework details',
           type: 'object',
           properties: {
-            homework: { $ref: 'Homework' }
+            _id: { type: 'string' },
+            lecture: { type: 'object' },
+            lectureCode: { type: 'string' },
+            group: { type: 'string' },
+            subgroup: { type: 'string' },
+            title: { type: 'string' },
+            description: { type: 'string' },
+            dueDate: { type: 'string', format: 'date-time' },
+            isUnlimited: { type: 'boolean' },
+            student: { type: 'object' },
+            fileId: { type: 'string' },
+            fileName: { type: 'string' },
+            submittedAt: { type: 'string', format: 'date-time' },
+            status: { type: 'string', enum: ['pending', 'submitted', 'graded'] },
+            grade: { type: 'number' },
+            feedback: { type: 'string' }
           }
         },
-        401: { $ref: 'Error' },
-        404: { $ref: 'Error' }
-      }
-    }
-  }, getHomework);
-
-  // Get student's homework
-  fastify.get<{
-    Params: { studentId: string };
-  }>('/student/:studentId', {
-    schema: {
-      tags: ['Homework'],
-      summary: 'Get student\'s homework',
-      description: 'Retrieve all homework submissions for a specific student',
-      security: [{ bearerAuth: [] }],
-      params: {
-        type: 'object',
-        required: ['studentId'],
-        properties: {
-          studentId: { type: 'string' }
+        404: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' }
+          }
         }
-      },
-      response: {
-        200: {
-          description: 'List of homework submissions',
-          type: 'object',
-          properties: {
-            homework: {
-              type: 'array',
-              items: { $ref: 'Homework' }
-            }
-          }
-        },
-        401: { $ref: 'Error' },
-        404: { $ref: 'Error' }
       }
     }
-  }, getStudentHomeworks);
+  }, homeworkController.getHomeworkById);
 
-  // Get lecture's homework
-  fastify.get<{
-    Params: { lectureId: string };
-  }>('/lecture/:lectureId', {
+  // Get homeworks by lecture
+  fastify.get('/lecture/:lectureId', {
     schema: {
       tags: ['Homework'],
-      summary: 'Get lecture\'s homework',
-      description: 'Retrieve all homework submissions for a specific lecture',
-      security: [{ bearerAuth: [] }],
+      summary: 'Get homeworks by lecture',
+      description: 'Retrieve all homeworks for a specific lecture',
       params: {
         type: 'object',
         required: ['lectureId'],
@@ -143,36 +111,327 @@ export default async function homeworkRoutes(fastify: FastifyInstance) {
       },
       response: {
         200: {
-          description: 'List of homework submissions',
-          type: 'object',
-          properties: {
-            homework: {
-              type: 'array',
-              items: { $ref: 'Homework' }
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              _id: { type: 'string' },
+              lecture: { type: 'object' },
+              lectureCode: { type: 'string' },
+              group: { type: 'string' },
+              subgroup: { type: 'string' },
+              title: { type: 'string' },
+              description: { type: 'string' },
+              dueDate: { type: 'string', format: 'date-time' },
+              isUnlimited: { type: 'boolean' },
+              student: { type: 'object' },
+              fileId: { type: 'string' },
+              fileName: { type: 'string' },
+              submittedAt: { type: 'string', format: 'date-time' },
+              status: { type: 'string', enum: ['pending', 'submitted', 'graded'] },
+              grade: { type: 'number' },
+              feedback: { type: 'string' }
             }
           }
         },
-        401: { $ref: 'Error' },
-        404: { $ref: 'Error' }
+        500: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' }
+          }
+        }
       }
     }
-  }, getLectureHomeworks);
+  }, homeworkController.getHomeworksByLecture);
 
-  // Grade homework
-  fastify.post<{
-    Params: { homeworkId: string };
-    Body: { grade: number; feedback?: string };
-  }>('/:homeworkId/grade', {
+  // Get homeworks by student
+  fastify.get('/student/:studentId', {
     schema: {
       tags: ['Homework'],
-      summary: 'Grade homework',
-      description: 'Grade a submitted homework',
-      security: [{ bearerAuth: [] }],
+      summary: 'Get homeworks by student',
+      description: 'Retrieve all homeworks for a specific student',
       params: {
         type: 'object',
-        required: ['homeworkId'],
+        required: ['studentId'],
         properties: {
-          homeworkId: { type: 'string' }
+          studentId: { type: 'string' }
+        }
+      },
+      response: {
+        200: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              _id: { type: 'string' },
+              lecture: { type: 'object' },
+              lectureCode: { type: 'string' },
+              group: { type: 'string' },
+              subgroup: { type: 'string' },
+              title: { type: 'string' },
+              description: { type: 'string' },
+              dueDate: { type: 'string', format: 'date-time' },
+              isUnlimited: { type: 'boolean' },
+              student: { type: 'object' },
+              fileId: { type: 'string' },
+              fileName: { type: 'string' },
+              submittedAt: { type: 'string', format: 'date-time' },
+              status: { type: 'string', enum: ['pending', 'submitted', 'graded'] },
+              grade: { type: 'number' },
+              feedback: { type: 'string' }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' }
+          }
+        }
+      }
+    }
+  }, homeworkController.getHomeworksByStudent);
+
+  // Create homework
+  fastify.post('/', {
+    schema: {
+      tags: ['Homework'],
+      summary: 'Create a new homework',
+      description: 'Create a new homework assignment for a lecture',
+      body: {
+        type: 'object',
+        required: ['lectureCode', 'group', 'subgroup', 'title', 'description'],
+        properties: {
+          lectureCode: { type: 'string' },
+          group: { type: 'string' },
+          subgroup: { type: 'string' },
+          title: { type: 'string' },
+          description: { type: 'string' },
+          dueDate: { type: 'string', format: 'date-time' },
+          isUnlimited: { type: 'boolean' }
+        }
+      },
+      response: {
+        201: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' },
+            homework: {
+              type: 'object',
+              properties: {
+                _id: { type: 'string' },
+                lecture: { type: 'object' },
+                lectureCode: { type: 'string' },
+                group: { type: 'string' },
+                subgroup: { type: 'string' },
+                title: { type: 'string' },
+                description: { type: 'string' },
+                dueDate: { type: 'string', format: 'date-time' },
+                isUnlimited: { type: 'boolean' },
+                status: { type: 'string', enum: ['pending', 'submitted', 'graded'] }
+              }
+            }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' }
+          }
+        },
+        404: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' }
+          }
+        }
+      }
+    }
+  }, homeworkController.createHomework);
+
+  // Update homework
+  fastify.put('/:id', {
+    schema: {
+      tags: ['Homework'],
+      summary: 'Update a homework',
+      description: 'Update an existing homework assignment',
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: { type: 'string' }
+        }
+      },
+      body: {
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          description: { type: 'string' },
+          dueDate: { type: 'string', format: 'date-time' },
+          isUnlimited: { type: 'boolean' },
+          status: { type: 'string', enum: ['pending', 'submitted', 'graded'] },
+          grade: { type: 'number' },
+          feedback: { type: 'string' }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            _id: { type: 'string' },
+            lecture: { type: 'object' },
+            lectureCode: { type: 'string' },
+            group: { type: 'string' },
+            subgroup: { type: 'string' },
+            title: { type: 'string' },
+            description: { type: 'string' },
+            dueDate: { type: 'string', format: 'date-time' },
+            isUnlimited: { type: 'boolean' },
+            student: { type: 'object' },
+            fileId: { type: 'string' },
+            fileName: { type: 'string' },
+            submittedAt: { type: 'string', format: 'date-time' },
+            status: { type: 'string', enum: ['pending', 'submitted', 'graded'] },
+            grade: { type: 'number' },
+            feedback: { type: 'string' }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' }
+          }
+        },
+        404: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' }
+          }
+        }
+      }
+    }
+  }, homeworkController.updateHomework);
+
+  // Delete homework
+  fastify.delete('/:id', {
+    schema: {
+      tags: ['Homework'],
+      summary: 'Delete a homework',
+      description: 'Delete an existing homework assignment',
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: { type: 'string' }
+        }
+      },
+      response: {
+        204: {
+          type: 'null'
+        },
+        404: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' }
+          }
+        }
+      }
+    }
+  }, homeworkController.deleteHomework);
+
+  // Submit homework
+  fastify.post('/:id/submit', {
+    schema: {
+      tags: ['Homework'],
+      summary: 'Submit a homework',
+      description: 'Submit a homework assignment with file upload',
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: { type: 'string' }
+        }
+      },
+      body: {
+        type: 'object',
+        required: ['studentId', 'fileId', 'fileName'],
+        properties: {
+          studentId: { type: 'string' },
+          fileId: { type: 'string' },
+          fileName: { type: 'string' }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            _id: { type: 'string' },
+            lecture: { type: 'object' },
+            lectureCode: { type: 'string' },
+            group: { type: 'string' },
+            subgroup: { type: 'string' },
+            title: { type: 'string' },
+            description: { type: 'string' },
+            dueDate: { type: 'string', format: 'date-time' },
+            isUnlimited: { type: 'boolean' },
+            student: { type: 'object' },
+            fileId: { type: 'string' },
+            fileName: { type: 'string' },
+            submittedAt: { type: 'string', format: 'date-time' },
+            status: { type: 'string', enum: ['pending', 'submitted', 'graded'] }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' }
+          }
+        },
+        404: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' }
+          }
+        }
+      }
+    }
+  }, homeworkController.submitHomework);
+
+  // Grade homework
+  fastify.post('/:id/grade', {
+    schema: {
+      tags: ['Homework'],
+      summary: 'Grade a homework',
+      description: 'Grade a submitted homework assignment',
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: { type: 'string' }
         }
       },
       body: {
@@ -185,17 +444,45 @@ export default async function homeworkRoutes(fastify: FastifyInstance) {
       },
       response: {
         200: {
-          description: 'Graded homework',
           type: 'object',
           properties: {
-            homework: { $ref: 'Homework' }
+            _id: { type: 'string' },
+            lecture: { type: 'object' },
+            lectureCode: { type: 'string' },
+            group: { type: 'string' },
+            subgroup: { type: 'string' },
+            title: { type: 'string' },
+            description: { type: 'string' },
+            dueDate: { type: 'string', format: 'date-time' },
+            isUnlimited: { type: 'boolean' },
+            student: { type: 'object' },
+            fileId: { type: 'string' },
+            fileName: { type: 'string' },
+            submittedAt: { type: 'string', format: 'date-time' },
+            status: { type: 'string', enum: ['pending', 'submitted', 'graded'] },
+            grade: { type: 'number' },
+            feedback: { type: 'string' }
           }
         },
-        400: { $ref: 'Error' },
-        401: { $ref: 'Error' },
-        403: { $ref: 'Error' },
-        404: { $ref: 'Error' }
+        400: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' }
+          }
+        },
+        404: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' }
+          }
+        }
       }
     }
-  }, gradeHomework);
+  }, homeworkController.gradeHomework);
 } 

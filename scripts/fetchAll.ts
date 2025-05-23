@@ -1,32 +1,38 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { fetchFaculties } from './fetchFaculties';
+import { fetchGroups } from './fetchGroups';
+import { fetchLectures } from './fetchLectures';
+import { generateSchedules } from './generateSchedules';
 
-const execAsync = promisify(exec);
-
-async function runScript(scriptName: string) {
-  console.log(`🚀 Running ${scriptName}...`);
+async function fetchAll() {
   try {
-    const { stdout, stderr } = await execAsync(`ts-node scripts/${scriptName}`);
-    if (stderr) console.error(`⚠️ Warning in ${scriptName}:`, stderr);
-    console.log(`✅ ${scriptName} completed successfully`);
-  } catch (error) {
-    console.error(`❌ Error in ${scriptName}:`, error);
-    throw error;
-  }
-}
+    console.log('Starting data fetch process...');
 
-async function main() {
-  try {
-    // Run scripts in sequence
-   // await runScript('fetchFaculties.ts');
-    await runScript('fetchGroups.ts');
-    await runScript('fetchSchedules.ts');
+    // Fetch faculties
+    console.log('\nFetching faculties...');
+    await fetchFaculties();
+    console.log('Faculties fetched successfully');
 
-    console.log('🎉 All scripts completed successfully!');
+    // Fetch groups
+    console.log('\nFetching groups...');
+    await fetchGroups();
+    console.log('Groups fetched successfully');
+
+    // Fetch lectures
+    console.log('\nFetching lectures...');
+    await fetchLectures();
+    console.log('Lectures fetched successfully');
+
+    // Generate schedules
+    console.log('\nGenerating schedules...');
+    await generateSchedules();
+    console.log('Schedules generated successfully');
+
+    console.log('\nAll data fetched and processed successfully!');
+    process.exit(0);
   } catch (error) {
-    console.error('❌ Script execution failed:', error);
+    console.error('Error in fetchAll:', error);
     process.exit(1);
   }
 }
 
-main();
+fetchAll();

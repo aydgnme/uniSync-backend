@@ -17,10 +17,10 @@ function generatePhoneNumber(): string {
 }
 
 function calculateSemester(groupName: string): number {
-  // Grup numarasından yılı al (3. rakam)
+  // Get year from group number (3rd digit)
   const yearDigit = parseInt(groupName[2]);
   
-  // Yıla göre dönemi hesapla (her yıl 2 dönem)
+  // Calculate semester based on year (2 semesters per year)
   return yearDigit * 2;
 }
 
@@ -71,7 +71,7 @@ async function main() {
   for (let i = 0; i < numberOfStudents; i++) {
     const success = await registerStudent(i);
     if (success) successCount++;
-    // Her kayıt arasında kısa bir bekleme süresi ekleyelim
+    // Add a short delay between each registration
     await new Promise(resolve => setTimeout(resolve, 100));
   }
 

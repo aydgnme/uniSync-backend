@@ -1,335 +1,200 @@
 import { FastifyRequest, FastifyReply } from "fastify";
-import { Lecture, Schedule } from "../models";
-import { getAcademicWeekNumber, getParity, calculateEndTime } from "../utils/time.utils";
-import { GetWeeklyScheduleParams } from "../interfaces/schedule.interface";
-
-function generateDefaultWeeks(parity: "ALL" | "ODD" | "EVEN"): number[] {
-  if (parity === "ALL") return Array.from({ length: 14 }, (_, i) => i + 1);
-  if (parity === "ODD") return [1, 3, 5, 7, 9, 11, 13];
-  if (parity === "EVEN") return [2, 4, 6, 8, 10, 12, 14];
-  return [];
-}
+import { Group } from "../models/group.model";
+import { Lecture } from "../models/lecture.model";
+import { getAcademicWeekNumber } from "../utils/time.utils";
+import { getCurrentMonth, getCurrentDay } from "../utils/date.utils";
 
 export const getSchedule = async (request: FastifyRequest, reply: FastifyReply) => {
   try {
-    const { group, subgroup } = request.params as { group: string; subgroup: string };
-    const { week: forcedWeek } = request.query as { week?: string };
+    const { facultyId, specializationShortName, studyYear, groupName, subgroupIndex } = request.params as { 
+      facultyId: string; 
+      specializationShortName: string;
+      studyYear: string;
+      groupName: string; 
+      subgroupIndex?: string;
+    };
+    const { week, month, today, parity } = request.query as { 
+      week?: string;
+      month?: string;
+      today?: boolean;
+      parity?: string;
+    };
 
-    let weekNumber = getAcademicWeekNumber();
-    if (forcedWeek) {
-      const parsedWeek = parseInt(forcedWeek, 10);
-      if (!isNaN(parsedWeek) && parsedWeek >= 1 && parsedWeek <= 14) {
-        weekNumber = parsedWeek;
-      }
+    // Find group information
+    const groupQuery: any = { 
+      facultyId, 
+      groupName,
+      specializationShortName,
+      studyYear: parseInt(studyYear)
+    };
+
+    // Add subgroup to group query if provided
+    if (subgroupIndex) {
+      groupQuery.subgroupIndex = subgroupIndex;
     }
 
-    const parity = getParity(weekNumber);
-
-    const lectures = await Lecture.find({
-      group,
-      subgroup,
-      $or: [{ parity: "ALL" }, { parity }]
-    }).lean();
-
-    const courses = lectures
-      .filter(lecture => {
-        const weeks = lecture.weeks.length > 0 ? lecture.weeks : generateDefaultWeeks(lecture.parity);
-        return weeks.includes(weekNumber);
-      })
-      .map((lecture, index) => {
-        const weeks = lecture.weeks.length > 0 ? lecture.weeks : generateDefaultWeeks(lecture.parity);
-
-        return {
-          id: `course-${index + 1}`,
-          code: lecture.code,
-          title: lecture.title,
-          type: lecture.type,
-          startTime: lecture.startHour,
-          endTime: calculateEndTime(lecture.startHour, lecture.duration),
-          duration: lecture.duration,
-          room: lecture.room,
-          teacher: lecture.teacher,
-          group: lecture.group,
-          subgroup: lecture.subgroup,
-          parity: lecture.parity,
-          weekDay: lecture.weekDay,
-        };
-      });
-
-    return reply.send({
-      success: true,
-      courses,
-      weekNumber,
-      parity
-    });
-  } catch (error) {
-    console.error(error);
-    return reply.status(500).send({ success: false, message: "Internal Server Error" });
-  }
-};
-
-
-export const getWeeklySchedule = async (request: FastifyRequest<{ Params: GetWeeklyScheduleParams }>, reply: FastifyReply) => {
-  try {
-    const { group, subgroup, weekNumber } = request.params;
-
-    if (!group || !subgroup || !weekNumber) {
-      return reply.status(400).send({ success: false, message: 'Group, subgroup, and week number are required.' });
-    }
-
-    const week = parseInt(weekNumber, 10);
-
-    if (isNaN(week) || week < 1 || week > 14) {
-      return reply.status(400).send({ success: false, message: 'Invalid week number. Week must be between 1 and 14.' });
-    }
-
-    const parity = getParity(week);
-
-    const lectures = await Lecture.find({
-      group,
-      subgroup,
-      $or: [{ parity: "ALL" }, { parity }]
-    }).lean();
-
-    const filteredLectures = lectures.filter(lecture => {
-      const weeks = lecture.weeks.length > 0 ? lecture.weeks : generateDefaultWeeks(lecture.parity);
-      return weeks.includes(week);
-    });
-
-    const courses = filteredLectures.map((lecture, index) => ({
-      id: `course-${index + 1}`,
-      code: lecture.code,
-      title: lecture.title,
-      type: lecture.type,
-      startTime: lecture.startHour,
-      endTime: calculateEndTime(lecture.startHour, lecture.duration),
-      duration: lecture.duration,
-      room: lecture.room,
-      teacher: lecture.teacher,
-      group: lecture.group,
-      subgroup: lecture.subgroup,
-      parity: lecture.parity,
-      weekDay: lecture.weekDay,
-    }));
-
-    return reply.send({
-      success: true,
-      group,
-      subgroup,
-      weekNumber: week,
-      parity,
-      courses
-    });
-  } catch (error) {
-    console.error('Error fetching weekly schedule:', error);
-    return reply.status(500).send({ success: false, message: 'Internal Server Error' });
-  }
-};
-
-
-export const getMonthlySchedule = async (request: FastifyRequest, reply: FastifyReply) => {
-  try {
-    const { group, subgroup, month } = request.params as { group: string; subgroup: string; month: string };
-    const monthNumber = parseInt(month, 10);
-
-    if (isNaN(monthNumber) || monthNumber < 1 || monthNumber > 12) {
-      return reply.status(400).send({
-        success: false,
-        message: "Invalid month number. Month must be between 1 and 12."
+    // Find Group record
+    const group = await Group.findOne(groupQuery);
+    if (!group) {
+      return reply.status(404).send({ 
+        success: false, 
+        message: subgroupIndex ? "Group or subgroup not found" : "Group not found" 
       });
     }
 
-    const lectures = await Lecture.find({
-      group,
-      subgroup,
-      $or: [{ parity: "ALL" }, { parity: "ODD" }, { parity: "EVEN" }]
-    }).lean();
+    // Build lecture query based on group info
+    const lectureQuery: any = {
+      facultyId,
+      groupId: group.id,
+      groupName,
+      specializationShortName
+    };
 
-    const monthlySchedule = Array.from({ length: 14 }, (_, weekIndex) => {
-      const weekNumber = weekIndex + 1;
-      const parity = getParity(weekNumber);
-
-      const weekLectures = lectures
-        .filter(lecture => {
-          const weeks = lecture.weeks.length > 0 ? lecture.weeks : generateDefaultWeeks(lecture.parity);
-          return weeks.includes(weekNumber);
-        })
-        .map((lecture, index) => ({
-          id: `course-${weekNumber}-${index + 1}`,
-          code: lecture.code,
-          title: lecture.title,
-          type: lecture.type,
-          startTime: lecture.startHour,
-          endTime: calculateEndTime(lecture.startHour, lecture.duration),
-          duration: lecture.duration,
-          room: lecture.room,
-          teacher: lecture.teacher,
-          group: lecture.group,
-          subgroup: lecture.subgroup,
-          parity: lecture.parity,
-          weekDay: lecture.weekDay,
-        }));
-
-      return {
-        weekNumber,
-        parity,
-        courses: weekLectures
-      };
-    });
-
-    return reply.send({
-      success: true,
-      month: monthNumber,
-      schedule: monthlySchedule
-    });
-  } catch (error) {
-    console.error(error);
-    return reply.status(500).send({ success: false, message: "Internal Server Error" });
-  }
-};
-
-export const getAllSubgroups = async (request: FastifyRequest, reply: FastifyReply) => {
-  try {
-    const uniqueSubgroups = await Lecture.distinct('subgroup');
-    
-    const subgroups = uniqueSubgroups.map(subgroup => ({
-      id: subgroup,
-      name: subgroup.toUpperCase()
-    }));
-
-    return reply.send({
-      success: true,
-      data: subgroups
-    });
-  } catch (error) {
-    console.error(error);
-    return reply.status(500).send({ success: false, message: "Internal Server Error" });
-  }
-};
-
-export const getCombinedSchedule = async (request: FastifyRequest, reply: FastifyReply) => {
-  try {
-    const { group, subgroups } = request.params as { group: string; subgroups: string };
-    const { week: forcedWeek } = request.query as { week?: string };
-
-    let weekNumber = getAcademicWeekNumber();
-    if (forcedWeek) {
-      const parsedWeek = parseInt(forcedWeek, 10);
-      if (!isNaN(parsedWeek) && parsedWeek >= 1 && parsedWeek <= 14) {
-        weekNumber = parsedWeek;
-      }
+    // Add subgroup to lecture query if provided
+    if (subgroupIndex) {
+      lectureQuery.subgroupIndex = subgroupIndex;
     }
 
-    const parity = getParity(weekNumber);
-    const subgroupList = subgroups.split(',').map(s => s.trim().toLowerCase());
+    // Parity support
+    if (parity) {
+      lectureQuery.$or = [
+        { parity: parity },
+        { parity: 'ALL' },
+        { parity: { $exists: false } }
+      ];
+    }
 
-    const lectures = await Lecture.find({
-      group,
-      subgroup: { $in: subgroupList },
-      $or: [{ parity: "ALL" }, { parity }]
-    }).lean();
+    // Handle different schedule types
+    if (today) {
+      const { day, dayName, weekNumber } = getCurrentDay();
+      lectureQuery.weeks = weekNumber;
+      lectureQuery.weekDay = day;
 
-    const filteredLectures = lectures.filter(lecture => {
-      const weeks = lecture.weeks.length > 0 ? lecture.weeks : generateDefaultWeeks(lecture.parity);
-      return weeks.includes(weekNumber);
-    });
+      const lectures = await Lecture.find(lectureQuery).sort({ startTime: 1 });
+      const courses = lectures.map(lecture => ({
+        id: lecture._id,
+        code: lecture.code,
+        title: lecture.title,
+        type: lecture.type,
+        startTime: lecture.startTime,
+        endTime: lecture.endTime,
+        duration: lecture.duration,
+        room: lecture.room,
+        teacher: lecture.teacher,
+        weekDay: lecture.weekDay
+      }));
 
-    const courses = filteredLectures.map((lecture, index) => ({
-      id: `course-${index + 1}`,
-      code: lecture.code,
-      title: lecture.title,
-      type: lecture.type,
-      startTime: lecture.startHour,
-      endTime: calculateEndTime(lecture.startHour, lecture.duration),
-      duration: lecture.duration,
-      room: lecture.room,
-      teacher: lecture.teacher,
-      group: lecture.group,
-      subgroup: lecture.subgroup,
-      parity: lecture.parity,
-      weekDay: lecture.weekDay,
-    }));
-
-    return reply.send({
-      success: true,
-      courses,
-      weekNumber,
-      parity,
-      subgroups: subgroupList
-    });
-  } catch (error) {
-    console.error(error);
-    return reply.status(500).send({ success: false, message: "Internal Server Error" });
-  }
-};
-
-export const getTodaySchedule = async (request: FastifyRequest, reply: FastifyReply) => {
-  try {
-    const { group, subgroup } = request.params as { group: string; subgroup: string };
-    const weekNumber = getAcademicWeekNumber();
-    const today = new Date();
-    const todayDay = today.getDay(); // 0: Pazar, 1: Pazartesi, ..., 6: Cumartesi
-
-    // Eğer Pazar ise (0) veya Cumartesi ise (6) boş ders programı döndür
-    if (todayDay === 0 || todayDay === 6) {
       return reply.send({
         success: true,
+        facultyId: group.facultyId,
+        groupId: group.id,
+        groupName: group.groupName,
+        subgroupIndex: group.subgroupIndex,
+        specializationShortName: group.specializationShortName,
+        studyYear: group.studyYear,
+        isModular: group.isModular,
         data: {
-          day: todayDay,
-          dayName: todayDay === 0 ? "Sunday" : "Saturday",
-          courses: [],
-          message: "No classes on weekends"
+          day,
+          dayName,
+          weekNumber,
+          parity: "ALL",
+          courses
         }
       });
     }
 
-    const parity = getParity(weekNumber);
+    if (month) {
+      const monthNumber = parseInt(month);
+      const lectures = await Lecture.find(lectureQuery).sort({ weekNumber: 1, weekDay: 1, startTime: 1 });
+      
+      const schedule = lectures.reduce((acc: any[], lecture) => {
+        const weekIndex = acc.findIndex(w => w.weekNumber === lecture.weeks[0]);
+        if (weekIndex === -1) {
+          acc.push({
+            weekNumber: lecture.weeks[0],
+            parity: "ALL",
+            courses: [{
+              id: lecture._id,
+              code: lecture.code,
+              title: lecture.title,
+              type: lecture.type,
+              startTime: lecture.startTime,
+              endTime: lecture.endTime,
+              duration: lecture.duration,
+              room: lecture.room,
+              teacher: lecture.teacher,
+              weekDay: lecture.weekDay
+            }]
+          });
+        } else {
+          acc[weekIndex].courses.push({
+            id: lecture._id,
+            code: lecture.code,
+            title: lecture.title,
+            type: lecture.type,
+            startTime: lecture.startTime,
+            endTime: lecture.endTime,
+            duration: lecture.duration,
+            room: lecture.room,
+            teacher: lecture.teacher,
+            weekDay: lecture.weekDay
+          });
+        }
+        return acc;
+      }, []);
 
-    const lectures = await Lecture.find({
-      group,
-      subgroup,
-      weekDay: todayDay,
-      $or: [{ parity: "ALL" }, { parity }]
-    }).lean();
+      return reply.send({
+        success: true,
+        facultyId: group.facultyId,
+        groupId: group.id,
+        groupName: group.groupName,
+        subgroupIndex: group.subgroupIndex,
+        specializationShortName: group.specializationShortName,
+        studyYear: group.studyYear,
+        isModular: group.isModular,
+        data: {
+          month: monthNumber,
+          schedule
+        }
+      });
+    }
 
-    const filteredLectures = lectures.filter(lecture => {
-      const weeks = lecture.weeks.length > 0 ? lecture.weeks : generateDefaultWeeks(lecture.parity);
-      return weeks.includes(weekNumber);
-    });
+    // Default: weekly schedule
+    const weekNumber = week ? parseInt(week) : getAcademicWeekNumber();
+    lectureQuery.weeks = weekNumber;
 
-    const courses = filteredLectures
-      .map((lecture, index) => ({
-        id: `course-${index + 1}`,
-        code: lecture.code,
-        title: lecture.title,
-        type: lecture.type,
-        startTime: lecture.startHour,
-        endTime: calculateEndTime(lecture.startHour, lecture.duration),
-        duration: lecture.duration,
-        room: lecture.room,
-        teacher: lecture.teacher,
-        group: lecture.group,
-        subgroup: lecture.subgroup,
-        parity: lecture.parity,
-        weekDay: lecture.weekDay,
-      }))
-      .sort((a, b) => a.startTime.localeCompare(b.startTime));
-
-    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const lectures = await Lecture.find(lectureQuery).sort({ weekDay: 1, startTime: 1 });
+    const courses = lectures.map(lecture => ({
+      id: lecture._id,
+      code: lecture.code,
+      title: lecture.title,
+      type: lecture.type,
+      startTime: lecture.startTime,
+      endTime: lecture.endTime,
+      duration: lecture.duration,
+      room: lecture.room,
+      teacher: lecture.teacher,
+      weekDay: lecture.weekDay
+    }));
 
     return reply.send({
       success: true,
+      facultyId: group.facultyId,
+      groupId: group.id,
+      groupName: group.groupName,
+      subgroupIndex: group.subgroupIndex,
+      specializationShortName: group.specializationShortName,
+      studyYear: group.studyYear,
+      isModular: group.isModular,
       data: {
-        day: todayDay,
-        dayName: dayNames[todayDay],
         weekNumber,
-        parity,
+        parity: "ALL",
         courses
       }
     });
   } catch (error) {
-    console.error(error);
-    return reply.status(500).send({ success: false, message: "Internal Server Error" });
+    console.error("Error in getSchedule:", error);
+    return reply.status(500).send({ success: false, message: "Internal server error" });
   }
 };
 

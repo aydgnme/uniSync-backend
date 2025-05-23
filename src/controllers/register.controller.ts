@@ -27,12 +27,7 @@ export class RegisterController {
         name,
         phone,
         address,
-        program,
-        semester,
-        groupName,
-        subgroupIndex,
-        advisor,
-        gpa
+        academicInfo
       } = parsed.data;
 
       const existingUser = await UserService.getUserByEmail(email);
@@ -54,15 +49,10 @@ export class RegisterController {
         phone,
         address,
         academicInfo: {
-          program,
-          semester,
-          groupName,
-          subgroupIndex,
-          advisor,
-          gpa,
+          ...academicInfo,
           studentId: matriculationNumber
         },
-        role: 'Student' // Bu kısmı istersen parsed.data.role'den al
+        role: 'Student' // You can get this from parsed.data.role if you want
       });
 
       return reply.code(201).send({

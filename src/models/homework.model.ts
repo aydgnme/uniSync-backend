@@ -1,98 +1,51 @@
 import { Schema, model, Types, Document } from 'mongoose';
-import { IUserDocument } from './user.model';
+import { IStudentDocument } from './student.model';
 import { ILectureDocument } from './lecture.model';
 
-interface IStudentInfo {
-  nrMatricol: string;
+export interface IHomework extends Document {
+  lecture: Types.ObjectId | ILectureDocument;
+  lectureCode: string;
   group: string;
   subgroup: string;
-  name: string;
-}
-
-interface ILectureInfo {
-  code: string;
   title: string;
-  type: string;
-  teacher: string;
-}
-
-export interface IHomework extends Document {
-  student: Types.ObjectId | IUserDocument;
-  lecture: Types.ObjectId | ILectureDocument;
-  fileId: string;
-  fileName: string;
-  submittedAt: Date;
-  status: 'pending' | 'graded';
+  description: string;
+  dueDate?: Date;
+  isUnlimited: boolean;
+  student?: Types.ObjectId | IStudentDocument;
+  fileId?: string;
+  fileName?: string;
+  submittedAt?: Date;
+  status: 'pending' | 'submitted' | 'graded';
   grade?: number;
   feedback?: string;
-  studentInfo: IStudentInfo;
-  lectureInfo: ILectureInfo;
 }
 
 const HomeworkSchema = new Schema({
-  student: {
-    type: Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  lecture: {
-    type: Types.ObjectId,
-    ref: 'Lecture',
-    required: true
-  },
-  fileId: { 
+  lecture: { type: Types.ObjectId, ref: 'Lecture', required: true },
+  lectureCode: { type: String, required: true },
+  group: { type: String, required: true },
+  subgroup: { type: String, required: true },
+  title: { type: String, required: true },
+  description: { type: String, required: true },
+  dueDate: { type: Date },
+  isUnlimited: { type: Boolean, default: false },
+  student: { type: Types.ObjectId, ref: 'Student' },
+  fileId: { type: String },
+  fileName: { type: String },
+  submittedAt: { type: Date },
+  status: { 
     type: String, 
-    required: true 
+    enum: ['pending', 'submitted', 'graded'], 
+    default: 'pending' 
   },
-  fileName: { 
-    type: String, 
-    required: true 
-  },
-  submittedAt: { 
-    type: Date, 
-    default: Date.now 
-  },
-  status: {
-    type: String,
-    enum: ['pending', 'graded'],
-    default: 'pending'
-  },
-  grade: {
-    type: Number,
-    min: 1,
-    max: 10,
-    required: false
-  },
-  feedback: {
-    type: String,
-    required: false
-  }
+  grade: { type: Number, min: 1, max: 10 },
+  feedback: { type: String }
+}, {
+  timestamps: true
 });
 
-// Virtual fields for student information
-HomeworkSchema.virtual('studentInfo').get(function(this: IHomework) {
-  const student = this.student as IUserDocument;
-  return {
-    nrMatricol: student?.matriculationNumber,
-    group: student?.academicInfo?.groupName,
-    subgroup: student?.academicInfo?.subgroupIndex,
-    name: student?.name
-  };
-});
+// Index for faster queries
+HomeworkSchema.index({ lectureCode: 1, group: 1, subgroup: 1 });
+HomeworkSchema.index({ student: 1, lecture: 1 });
 
-// Virtual fields for lecture information
-HomeworkSchema.virtual('lectureInfo').get(function(this: IHomework) {
-  const lecture = this.lecture as ILectureDocument;
-  return {
-    code: lecture?.code,
-    title: lecture?.title,
-    type: lecture?.type,
-    teacher: lecture?.teacher
-  };
-});
-
-// Ensure virtuals are included in JSON output
-HomeworkSchema.set('toJSON', { virtuals: true });
-HomeworkSchema.set('toObject', { virtuals: true });
-
-export const Homework = model<IHomework>('Homework', HomeworkSchema); 
+export const Homework = model<IHomework>('Homework', HomeworkSchema);

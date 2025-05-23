@@ -1,107 +1,132 @@
-import { Schedule, Lecture } from '../src/models';
-import mongoose from 'mongoose';
-import { connectToMongoDB } from "../src/database/mongo";
+import { connectToMongoDB } from '../src/database/mongo';
+import { Lecture } from '../src/models/lecture.model';
+import { Schedule } from '../src/models/schedule.model';
+import { Group } from '../src/models/group.model';
+import { ILectureDocument } from '../src/models/lecture.model';
 
-function calculateEndTime(startHour: string, durationMinutes: number): string {
-  const [hours, minutes] = startHour.split(':').map(Number);
-  const startDate = new Date(0, 0, 0, hours, minutes);
-  const endDate = new Date(startDate.getTime() + durationMinutes * 60000);
-  return endDate.toTimeString().slice(0, 5);
-}
-
-export const generateSchedules = async () => {
+export async function generateSchedules() {
   try {
     await connectToMongoDB();
-    console.log('🧹 Clearing existing schedules...');
+    console.log('✅ Connected to MongoDB');
+
+    const groups = await Group.find();
+    console.log(`🔍 Found ${groups.length} groups`);
+
     await Schedule.deleteMany({});
+    console.log('🧹 Cleared existing schedules');
 
-    const lectures = await Lecture.find().lean();
-    const scheduleMap = new Map<string, any>();
+    let totalSchedules = 0;
+    let totalLectures = 0;
+    let failedGroups = 0;
 
-    let skippedLectures = 0;
-    let totalLecturesChecked = 0;
+    for (const group of groups) {
+      const groupIdentifier = `${group.specializationShortName}-${group.groupName}${group.subgroupIndex || ''}`;
+      console.log(`\n📚 Processing group: ${groupIdentifier}`);
 
-    for (let week = 1; week <= 14; week++) {
-      const weekLectures = lectures.filter((lecture) => {
-        const weeks = lecture.weeks?.length ? lecture.weeks : Array.from({ length: 14 }, (_, i) => i + 1);
-        return weeks.includes(week);
-      });
+      try {
+        const query = {
+          facultyId: group.facultyId,
+          groupId: group.id,
+          groupName: group.groupName,
+          specializationShortName: group.specializationShortName,
+          ...(group.subgroupIndex ? { subgroupIndex: group.subgroupIndex } : {})
+        };
 
-      for (const lecture of weekLectures) {
-        totalLecturesChecked++;
+        const lectures = await Lecture.find(query).sort({ weekDay: 1, startTime: 1 });
 
-        if (!lecture.room || lecture.room.trim() === '') {
-          console.warn(`⚠️ Skipping lecture (missing room): ${lecture.code} (${lecture.title})`);
-          skippedLectures++;
-          continue;
-        }
-        if (!lecture.teacher || lecture.teacher.trim() === '') {
-          console.warn(`⚠️ Skipping lecture (missing teacher): ${lecture.code} (${lecture.title})`);
-          skippedLectures++;
-          continue;
-        }
-        if (!lecture.subgroup || lecture.subgroup.trim() === '') {
-          console.warn(`⚠️ Skipping lecture (missing subgroup): ${lecture.code} (${lecture.title})`);
-          skippedLectures++;
+        if (lectures.length === 0) {
+          console.warn(`⚠️ No lectures found for group ${groupIdentifier}`);
+          failedGroups++;
           continue;
         }
 
-        const key = `${lecture.group}_${lecture.subgroup}_${week}`;
+        console.log(`🔢 Found ${lectures.length} lectures`);
+        totalLectures += lectures.length;
 
-        if (!scheduleMap.has(key)) {
-          scheduleMap.set(key, {
-            group: lecture.group,
-            subgroup: lecture.subgroup,
-            weekNumber: week,
-            courses: [],
+        const lecturesByWeekAndParity = lectures.reduce((acc, lecture) => {
+          lecture.weeks.forEach(weekNumber => {
+            const key = `${weekNumber}-${lecture.parity || 'none'}`;
+            if (!acc[key]) {
+              acc[key] = {
+                weekNumber,
+                parity: lecture.parity,
+                lectures: []
+              };
+            }
+            acc[key].lectures.push(lecture);
           });
+          return acc;
+        }, {} as Record<string, { weekNumber: number; parity: string | null; lectures: ILectureDocument[] }>);
+
+        for (const { weekNumber, parity, lectures: weekLectures } of Object.values(lecturesByWeekAndParity)) {
+          const scheduleData = {
+            facultyId: group.facultyId,
+            groupId: group.id,
+            groupName: group.groupName,
+            subgroupIndex: group.subgroupIndex || '',
+            specializationShortName: group.specializationShortName,
+            studyYear: group.studyYear,
+            isModular: group.isModular,
+            weekNumber,
+            parity,
+            courses: weekLectures.map(lecture => ({
+              id: lecture._id,
+              code: lecture.code,
+              title: lecture.title,
+              type: lecture.type,
+              startTime: lecture.startTime,
+              endTime: lecture.endTime,
+              duration: lecture.duration,
+              room: lecture.room,
+              teacher: lecture.teacher,
+              weekDay: lecture.weekDay
+            }))
+          };
+
+          const scheduleQuery = {
+            facultyId: group.facultyId,
+            groupId: group.id,
+            groupName: group.groupName,
+            specializationShortName: group.specializationShortName,
+            ...(group.subgroupIndex ? { subgroupIndex: group.subgroupIndex } : {}),
+            weekNumber,
+            parity
+          };
+
+          await Schedule.findOneAndUpdate(
+            scheduleQuery,
+            scheduleData,
+            { upsert: true, new: true }
+          );
+
+          totalSchedules++;
         }
 
-        const schedule = scheduleMap.get(key);
-
-        schedule.courses.push({
-          code: lecture.code,
-          title: lecture.title,
-          type: lecture.type,
-          startTime: lecture.startHour,
-          endTime: calculateEndTime(lecture.startHour, lecture.duration),
-          duration: lecture.duration,
-          room: lecture.room,
-          teacher: lecture.teacher,
-          weekDay: lecture.weekDay,
-        });
+        console.log(`✅ Generated schedules for group ${groupIdentifier}`);
+      } catch (error) {
+        console.error(`❌ Error processing group ${groupIdentifier}:`, error);
+        failedGroups++;
+        continue;
       }
     }
 
-    const schedulesArray = Array.from(scheduleMap.values());
-
-    // 🔥 Sort courses by weekDay (1 to 7) before inserting
-    schedulesArray.forEach(schedule => {
-      schedule.courses.sort((a: any, b: any) => a.weekDay - b.weekDay);
-    });
-
-    if (schedulesArray.length > 0) {
-      await Schedule.insertMany(schedulesArray);
-      console.log(`✅ ${schedulesArray.length} schedules inserted successfully!`);
-    } else {
-      console.log('⚠️ No schedules to insert.');
-    }
-
-    const successRate = (((totalLecturesChecked - skippedLectures) / totalLecturesChecked) * 100).toFixed(2);
-
-    console.log('--- 📊 Statistics ---');
-    console.log(`🔹 Total lectures checked: ${totalLecturesChecked}`);
-    console.log(`🔹 Lectures skipped (missing fields): ${skippedLectures}`);
-    console.log(`🔹 Lectures successfully used: ${totalLecturesChecked - skippedLectures}`);
-    console.log(`🔹 Success rate: ${successRate}%`);
-    console.log('----------------------');
-
-    await mongoose.disconnect();
-    console.log('🔌 MongoDB disconnected');
-  } catch (err) {
-    console.error('❌ Error generating schedules:', err);
-    await mongoose.disconnect();
+    console.log(`\n🎉 Finished generating all schedules`);
+    console.log(`📊 Summary:`);
+    console.log(`   • Total groups processed: ${groups.length}`);
+    console.log(`   • Successful groups: ${groups.length - failedGroups}`);
+    console.log(`   • Failed groups: ${failedGroups}`);
+    console.log(`   • Total lectures processed: ${totalLectures}`);
+    console.log(`   • Total schedules generated: ${totalSchedules}`);
+    return true;
+  } catch (error) {
+    console.error('🚨 Fatal error:', error);
+    throw error;
   }
-};
+}
 
-generateSchedules();
+// Run if called directly
+if (require.main === module) {
+  generateSchedules()
+    .then(() => process.exit(0))
+    .catch(() => process.exit(1));
+}

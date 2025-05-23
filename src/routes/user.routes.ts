@@ -4,6 +4,9 @@ import { AuthController } from '../controllers/auth.controller';
 import { checkUserSchema } from '../schemas/auth.schemas';
 import { UserService } from '../services/user.service';
 import { verifyAdmin } from '../middlewares/auth.middleware';
+import { authJWT } from '../middlewares/auth.jwt.middleware';
+import { Types } from 'mongoose';
+import { logger } from '../utils/logger';
 
 export default async function userRoutes(fastify: FastifyInstance) {
   // Check user existence (no auth required)
@@ -43,23 +46,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
   }, AuthController.checkUser);
 
   // Add JWT authentication hook for protected routes
-  fastify.addHook('onRequest', async (request, reply) => {
-    try {
-      await request.jwtVerify();
-      const decoded = request.user as any;
-      request.user = {
-        _id: decoded.userId,
-        email: decoded.email,
-        role: decoded.role || 'Student'
-      };
-    } catch (err) {
-      reply.code(401).send({
-        message: 'Unauthorized',
-        code: 'UNAUTHORIZED',
-        statusCode: 401
-      });
-    }
-  });
+  fastify.addHook('onRequest', authJWT);
 
   // Get user profile
   fastify.get('/profile', {
@@ -83,17 +70,26 @@ export default async function userRoutes(fastify: FastifyInstance) {
       });
     }
 
-    const userId = (request.user as any)._id;
-    const user = await UserService.getUserById(userId);
-    if (!user) {
-      return reply.status(404).send({
-        message: 'User not found',
-        code: 'NOT_FOUND',
-        statusCode: 404
+    try {
+      const user = await UserService.getUserById(request.user.userId);
+      
+      if (!user) {
+        return reply.status(404).send({
+          message: 'User not found',
+          code: 'NOT_FOUND',
+          statusCode: 404
+        });
+      }
+
+      return user;
+    } catch (error) {
+      logger.error('Error fetching user profile:', error);
+      return reply.status(500).send({
+        message: 'Internal server error',
+        code: 'INTERNAL_SERVER_ERROR',
+        statusCode: 500
       });
     }
-
-    return user;
   });
 
   // Get user by ID
@@ -187,5 +183,116 @@ export default async function userRoutes(fastify: FastifyInstance) {
     },
     preHandler: [verifyAdmin],
     handler: UserController.updateUserRole
+  });
+
+  // Update user
+  fastify.put('/:id', {
+    schema: {
+      tags: ['Users'],
+      summary: 'Update user',
+      description: 'Update a user\'s information',
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: { type: 'string' }
+        }
+      },
+      body: {
+        type: 'object',
+        properties: {
+          academicInfo: {
+            type: 'object',
+            properties: {
+              program: { type: 'string' },
+              semester: { type: 'number' },
+              groupName: { type: 'string' },
+              subgroupIndex: { type: 'string' },
+              studentId: { type: 'string' },
+              advisor: { type: 'string' },
+              gpa: { type: 'number' },
+              specializationShortName: { type: 'string' },
+              facultyId: { type: 'string' }
+            }
+          }
+        }
+      },
+      response: {
+        200: { $ref: 'User' },
+        401: { $ref: 'Error' },
+        404: { $ref: 'Error' }
+      }
+    }
+  }, UserController.updateUser);
+
+  // Get user by matriculation number
+  fastify.get('/by-matriculation', {
+    schema: {
+      tags: ['Users'],
+      summary: 'Get user by matriculation number',
+      description: 'Get a user by their matriculation number',
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        properties: {
+          matriculationNumber: { type: 'string' }
+        },
+        required: ['matriculationNumber']
+      },
+      response: {
+        200: { $ref: 'User' },
+        401: { $ref: 'Error' },
+        404: { $ref: 'Error' }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const { matriculationNumber } = request.query as { matriculationNumber: string };
+      
+      if (!request.user) {
+        logger.warn('No user found in request');
+        return reply.code(401).send({
+          message: 'Unauthorized',
+          code: 'UNAUTHORIZED',
+          statusCode: 401
+        });
+      }
+
+      // Check if user is admin or requesting their own profile
+      const isAdmin = request.user.role.toLowerCase() === 'admin';
+      const isOwnProfile = request.user.matriculationNumber === matriculationNumber;
+      
+      logger.info('Auth check:', { isAdmin, isOwnProfile, matriculationNumber });
+
+      if (!isAdmin && !isOwnProfile) {
+        logger.warn('Access denied - not admin and not own profile');
+        return reply.code(403).send({
+          message: 'Access denied',
+          code: 'FORBIDDEN',
+          statusCode: 403
+        });
+      }
+
+      const user = await UserService.getUserByMatriculationNumber(matriculationNumber);
+      logger.info('User found:', user ? 'Yes' : 'No');
+      
+      if (!user) {
+        logger.warn('User not found in database');
+        return reply.code(404).send({
+          message: 'User not found',
+          code: 'NOT_FOUND',
+          statusCode: 404
+        });
+      }
+
+      return reply.code(200).send(user);
+    } catch (error: unknown) {
+      logger.error('Error fetching user:', error);
+      return reply.code(500).send({
+        message: 'Error fetching user',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
   });
 }
