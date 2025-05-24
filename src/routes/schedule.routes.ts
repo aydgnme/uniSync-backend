@@ -276,4 +276,5 @@ Get the schedule for a specific group in a faculty. Optionally specify a subgrou
       }
     }
   }, getSchedule);
+  
 }

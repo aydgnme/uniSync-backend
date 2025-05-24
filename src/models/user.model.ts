@@ -73,10 +73,7 @@ const userSchema = new Schema<IUserDocument>({
   timestamps: true // Adds createdAt and updatedAt fields
 });
 
-// Add indexes for frequently queried fields
-userSchema.index({ email: 1 });
-userSchema.index({ cnp: 1 });
-userSchema.index({ matriculationNumber: 1 });
+// Add indexes for frequently queried fields that are not already indexed
 userSchema.index({ 'academicInfo.groupId': 1 });
 userSchema.index({ 'academicInfo.facultyId': 1 });
 userSchema.index({ 'academicInfo.specializationShortName': 1 });

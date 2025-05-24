@@ -1,8 +1,10 @@
-export const swaggerOptions = {
+import { FastifyDynamicSwaggerOptions } from '@fastify/swagger';
+
+export const swaggerOptions: FastifyDynamicSwaggerOptions = {
   openapi: {
     info: {
       title: 'USV Portal API',
-      description: 'USV Portal API documentation',
+      description: 'API documentation for USV Portal',
       version: '1.0.0',
       contact: {
         name: 'USV Portal Team',
@@ -11,12 +13,8 @@ export const swaggerOptions = {
     },
     servers: [
       {
-        url: 'http://localhost:3000/api',
+        url: 'http://localhost:3000',
         description: 'Development server'
-      },
-      {
-        url: 'https://api.usvportal.com/api',
-        description: 'Production server'
       }
     ],
     components: {
@@ -24,53 +22,123 @@ export const swaggerOptions = {
         bearerAuth: {
           type: 'http',
           scheme: 'bearer',
-          bearerFormat: 'JWT'
+          bearerFormat: 'JWT',
+          description: 'Enter your JWT token in the format: Bearer <token>'
         }
       },
       schemas: {
         Error: {
           type: 'object',
-          required: ['message'],
+          required: ['message', 'code', 'statusCode'],
           properties: {
             message: { type: 'string' },
             code: { type: 'string' },
             statusCode: { type: 'number' }
           }
         },
-        Homework: {
+        CourseGrade: {
           type: 'object',
-          required: ['student', 'lecture', 'fileId', 'fileName'],
+          required: ['studentId', 'lectureId', 'academicYear', 'semester'],
           properties: {
             _id: { type: 'string' },
-            student: { type: 'string' },
-            lecture: { type: 'string' },
-            fileId: { type: 'string' },
-            fileName: { type: 'string' },
-            submittedAt: { type: 'string', format: 'date-time' },
-            status: { type: 'string', enum: ['pending', 'graded'] },
-            grade: { type: 'number', minimum: 1, maximum: 10 },
-            feedback: { type: 'string' },
-            studentInfo: {
+            studentId: { type: 'string' },
+            lectureId: { type: 'string' },
+            academicYear: { type: 'string' },
+            semester: { type: 'number', minimum: 1, maximum: 2 },
+            midtermGrade: { type: 'number', minimum: 0, maximum: 100 },
+            finalGrade: { type: 'number', minimum: 0, maximum: 100 },
+            makeUpGrade: { type: 'number', minimum: 0, maximum: 100 },
+            letterGrade: { type: 'string' },
+            gpa: { type: 'number', minimum: 0, maximum: 4 },
+            status: { type: 'string', enum: ['active', 'passive'] },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        CourseGradeUpdate: {
+          type: 'object',
+          properties: {
+            midtermGrade: { type: 'number', minimum: 0, maximum: 100 },
+            finalGrade: { type: 'number', minimum: 0, maximum: 100 },
+            makeUpGrade: { type: 'number', minimum: 0, maximum: 100 },
+            letterGrade: { type: 'string' },
+            gpa: { type: 'number', minimum: 0, maximum: 4 },
+            status: { type: 'string', enum: ['active', 'passive'] }
+          }
+        },
+        GradeReview: {
+          type: 'object',
+          required: ['reason'],
+          properties: {
+            reason: { type: 'string' },
+            details: { type: 'string' }
+          }
+        },
+        StructuredGrades: {
+          type: 'object',
+          properties: {
+            academicYears: {
               type: 'object',
-              properties: {
-                nrMatricol: { type: 'string' },
-                group: { type: 'string' },
-                subgroup: { type: 'string' },
-                name: { type: 'string' }
+              additionalProperties: {
+                type: 'object',
+                properties: {
+                  semesters: {
+                    type: 'object',
+                    additionalProperties: {
+                      type: 'object',
+                      properties: {
+                        courses: {
+                          type: 'array',
+                          items: {
+                            type: 'object',
+                            properties: {
+                              lectureId: { type: 'string' },
+                              title: { type: 'string' },
+                              midtermGrade: { type: 'number' },
+                              finalGrade: { type: 'number' },
+                              makeUpGrade: { type: 'number' },
+                              letterGrade: { type: 'string' },
+                              gpa: { type: 'number' }
+                            }
+                          }
+                        },
+                        semesterGPA: { type: 'number' }
+                      }
+                    }
+                  },
+                  yearGPA: { type: 'number' }
+                }
               }
             },
-            lectureInfo: {
+            overallGPA: { type: 'number' }
+          }
+        },
+        LectureStatistics: {
+          type: 'object',
+          properties: {
+            totalStudents: { type: 'number' },
+            averageGrade: { type: 'number' },
+            gradeDistribution: {
               type: 'object',
               properties: {
-                code: { type: 'string' },
-                title: { type: 'string' },
-                type: { type: 'string' },
-                teacher: { type: 'string' }
+                A: { type: 'number' },
+                B: { type: 'number' },
+                C: { type: 'number' },
+                D: { type: 'number' },
+                F: { type: 'number' }
               }
-            }
+            },
+            passRate: { type: 'number' }
           }
         }
       }
-    }
+    },
+    tags: [
+      { name: 'Auth', description: 'Authentication endpoints' },
+      { name: 'Users', description: 'User management endpoints' },
+      { name: 'Homework', description: 'Homework management endpoints' },
+      { name: 'Grades', description: 'Course grade management endpoints' },
+      { name: 'System', description: 'System management endpoints' }
+    ]
   }
 }; 

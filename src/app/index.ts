@@ -7,6 +7,7 @@ import swaggerUi from '@fastify/swagger-ui';
 import jwt from '@fastify/jwt';
 import { schemas } from '../schemas/index';
 import { connectToMongoDB } from '../database/mongo';
+import { swaggerOptions } from '../config/swagger';
 
 const buildServer = async (): Promise<FastifyInstance> => {
   const app = Fastify({
@@ -78,39 +79,8 @@ const buildServer = async (): Promise<FastifyInstance> => {
 
   // Register Swagger
   await app.register(swagger, {
-    openapi: {
-      info: {
-        title: 'USV Portal API',
-        description: 'API documentation for USV Portal',
-        version: '1.0.0',
-        contact: {
-          name: 'USV Portal Team',
-          email: 'support@usvportal.com'
-        }
-      },
-      servers: [
-        {
-          url: 'http://localhost:3000',
-          description: 'Development server'
-        }
-      ],
-      components: {
-        securitySchemes: {
-          bearerAuth: {
-            type: 'http',
-            scheme: 'bearer',
-            bearerFormat: 'JWT',
-            description: 'Enter your JWT token in the format: Bearer <token>'
-          }
-        }
-      },
-      tags: [
-        { name: 'Auth', description: 'Authentication endpoints' },
-        { name: 'Users', description: 'User management endpoints' },
-        { name: 'Homework', description: 'Homework management endpoints' },
-        { name: 'System', description: 'System management endpoints' }
-      ]
-    }
+    ...swaggerOptions,
+    mode: 'dynamic'
   });
 
   await app.register(swaggerUi, {
@@ -130,13 +100,28 @@ const buildServer = async (): Promise<FastifyInstance> => {
   });
 
   // Register routes
-  await app.register(import('../routes/auth.routes'), { prefix: '/api/auth' });
-  await app.register(import('../routes/user.routes'), { prefix: '/api/users' });
-  await app.register(import('../routes/homework.routes'), { prefix: '/api/homework' });
-  await app.register(import('../routes/test.routes'), { prefix: '/api/test' });
-  await app.register(import('../routes/schedule.routes'), { prefix: '/api/schedule' });
-  await app.register(import('../routes/course-grade.routes'), { prefix: '/api/course-grades' });
-  await app.register(import('../routes/gridfs.routes'), { prefix: '/api/files' });
+  const routes = [
+    { path: '../routes/auth.routes', prefix: '/api/auth' },
+    { path: '../routes/user.routes', prefix: '/api/users' },
+    { path: '../routes/homework.routes', prefix: '/api/homework' },
+    { path: '../routes/test.routes', prefix: '/api/test' },
+    { path: '../routes/schedule.routes', prefix: '/api/schedule' },
+    { path: '../routes/course-grade.routes', prefix: '/api/course-grades' },
+    { path: '../routes/gridfs.routes', prefix: '/api/files' }
+  ];
+
+  for (const route of routes) {
+    try {
+      const routeModule = await import(route.path);
+      if (typeof routeModule.default === 'function') {
+        await app.register(routeModule.default, { prefix: route.prefix });
+      } else {
+        app.log.error(`Invalid route module: ${route.path}`);
+      }
+    } catch (error) {
+      app.log.error(`Failed to load route module: ${route.path}`, error);
+    }
+  }
 
   // Health check endpoint
   app.get('/api/system/health', {

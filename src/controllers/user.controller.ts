@@ -104,7 +104,8 @@ export class UserController {
         academicInfo: {
           ...parsed.data.academicInfo,
           studyYear: parsed.data.academicInfo.studyYear || 1, // Default to first year if not provided
-          isModular: parsed.data.academicInfo.isModular || false // Default to false if not provided
+          isModular: parsed.data.academicInfo.isModular || false, // Default to false if not provided
+          groupId: parsed.data.academicInfo.groupId || '' // Ensure groupId is always a string
         }
       };
 
@@ -158,7 +159,8 @@ export class UserController {
         updateData.academicInfo = {
           ...updateData.academicInfo,
           studyYear: updateData.academicInfo.studyYear || 1,
-          isModular: updateData.academicInfo.isModular || false
+          isModular: updateData.academicInfo.isModular || false,
+          groupId: updateData.academicInfo.groupId || '' // Ensure groupId is always a string
         };
       }
 

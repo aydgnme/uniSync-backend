@@ -27,20 +27,8 @@ export default async function gridfsRoutes(fastify: FastifyInstance) {
             fileId: { type: 'string' }
           }
         },
-        400: {
-          description: 'Invalid request',
-          type: 'object',
-          properties: {
-            message: { type: 'string' }
-          }
-        },
-        500: {
-          description: 'Server error',
-          type: 'object',
-          properties: {
-            message: { type: 'string' }
-          }
-        }
+        400: { $ref: 'Error' },
+        500: { $ref: 'Error' }
       }
     }
   }, async (request, reply) => {
@@ -82,20 +70,8 @@ export default async function gridfsRoutes(fastify: FastifyInstance) {
           type: 'string',
           format: 'binary'
         },
-        404: {
-          description: 'File not found',
-          type: 'object',
-          properties: {
-            message: { type: 'string' }
-          }
-        },
-        500: {
-          description: 'Server error',
-          type: 'object',
-          properties: {
-            message: { type: 'string' }
-          }
-        }
+        404: { $ref: 'Error' },
+        500: { $ref: 'Error' }
       }
     }
   }, async (request, reply) => {
@@ -129,20 +105,8 @@ export default async function gridfsRoutes(fastify: FastifyInstance) {
         204: {
           description: 'File deleted successfully'
         },
-        404: {
-          description: 'File not found',
-          type: 'object',
-          properties: {
-            message: { type: 'string' }
-          }
-        },
-        500: {
-          description: 'Server error',
-          type: 'object',
-          properties: {
-            message: { type: 'string' }
-          }
-        }
+        404: { $ref: 'Error' },
+        500: { $ref: 'Error' }
       }
     }
   }, async (request, reply) => {
@@ -179,20 +143,8 @@ export default async function gridfsRoutes(fastify: FastifyInstance) {
             uploadDate: { type: 'string', format: 'date-time' }
           }
         },
-        404: {
-          description: 'File not found',
-          type: 'object',
-          properties: {
-            message: { type: 'string' }
-          }
-        },
-        500: {
-          description: 'Server error',
-          type: 'object',
-          properties: {
-            message: { type: 'string' }
-          }
-        }
+        404: { $ref: 'Error' },
+        500: { $ref: 'Error' }
       }
     }
   }, async (request, reply) => {

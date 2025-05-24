@@ -1,7 +1,8 @@
-import axios from 'axios';
+import { connectToMongoDB } from '../src/database/mongo';
 import { faker } from '@faker-js/faker';
-
-const BASE_URL = 'http://localhost:3000/api/users';
+import { User } from '../src/models/user.model';
+import { logger } from '../src/utils/logger';
+import bcrypt from 'bcryptjs';
 
 const allGroups = [
   '3111', '3112', '3113', '3114',
@@ -11,9 +12,9 @@ const allGroups = [
 ];
 
 function generatePhoneNumber(): string {
-    const prefix = '+407';
-    const number = faker.string.numeric(8);
-    return `${prefix}${number}`;
+  const prefix = '+407';
+  const number = faker.string.numeric(8);
+  return `${prefix}${number}`;
 }
 
 function calculateSemester(groupName: string): number {
@@ -33,49 +34,70 @@ async function registerStudent(index: number) {
   const lastName = faker.person.lastName();
   const email = `${firstName.toLowerCase()}.${lastName.toLowerCase()}@student.usv.ro`;
 
-  const student = {
-    email,
-    password: 'Student@123!',
-    confirmPassword: 'Student@123!',
-    cnp: faker.string.numeric(13),
-    matriculationNumber,
-    name: `${firstName} ${lastName}`,
-    role: 'Student',
-    phone: generatePhoneNumber(),
-    address: faker.location.streetAddress(),
-    academicInfo: {
-      program: 'Computer Science',
-      semester: calculateSemester(groupName),
-      groupName,
-      subgroupIndex: faker.helpers.arrayElement(['a', 'b']),
-      studentId: matriculationNumber,
-      advisor: `Prof. Dr. ${faker.person.fullName()}`,
-      gpa: parseFloat((Math.random() * 3 + 6).toFixed(2))
-    }
-  };
-
   try {
-    const response = await axios.post(BASE_URL, student);
-    console.log(`✅ Registered: ${email} (${matriculationNumber}) in group ${groupName} - Semester ${student.academicInfo.semester}`);
+    // Check if student already exists
+    const existingStudent = await User.findOne({ email });
+    if (existingStudent) {
+      logger.info(`Student ${email} already exists, skipping...`);
+      return true;
+    }
+
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash('Student@123!', salt);
+
+    const student = new User({
+      email,
+      password: hashedPassword,
+      cnp: faker.string.numeric(13),
+      matriculationNumber,
+      name: `${firstName} ${lastName}`,
+      role: 'STUDENT',
+      phone: generatePhoneNumber(),
+      address: faker.location.streetAddress(),
+      academicInfo: {
+        program: 'Computer Science',
+        semester: calculateSemester(groupName),
+        groupName,
+        subgroupIndex: faker.helpers.arrayElement(['a', 'b']),
+        studentId: matriculationNumber,
+        advisor: `Prof. Dr. ${faker.person.fullName()}`,
+        gpa: parseFloat((Math.random() * 3 + 6).toFixed(2)),
+        studyYear: parseInt(groupName[2]),
+        isModular: false
+      }
+    });
+
+    await student.save();
+    logger.info(`✅ Registered: ${email} (${matriculationNumber}) in group ${groupName} - Semester ${student.academicInfo.semester}`);
     return true;
-  } catch (error: any) {
-    console.error(`❌ Failed: ${email}`, error.response?.data || error.message);
+  } catch (error) {
+    logger.error(`❌ Failed: ${email}`, error);
     return false;
   }
 }
 
 async function main() {
-  const numberOfStudents = 100;
-  let successCount = 0;
-  
-  for (let i = 0; i < numberOfStudents; i++) {
-    const success = await registerStudent(i);
-    if (success) successCount++;
-    // Add a short delay between each registration
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
+  try {
+    await connectToMongoDB();
+    logger.info('Connected to MongoDB');
 
-  console.log(`🎓 Finished registering students. Success: ${successCount}/${numberOfStudents}`);
+    const numberOfStudents = 100;
+    let successCount = 0;
+    
+    for (let i = 0; i < numberOfStudents; i++) {
+      const success = await registerStudent(i);
+      if (success) successCount++;
+      // Add a short delay between each registration
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    logger.info(`🎓 Finished registering students. Success: ${successCount}/${numberOfStudents}`);
+  } catch (error) {
+    logger.error('Error registering students:', error);
+  } finally {
+    process.exit(0);
+  }
 }
 
-main().catch(console.error);
+main();

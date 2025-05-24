@@ -28,6 +28,15 @@ export interface ILectureDocument extends Document {
   parity: 'ODD' | 'EVEN' | 'ALL';
   specializationShortName: string;
   studyYear: number;
+  credits: number;
+  evaluationType: 'EXAM' | 'COLLOQUIUM' | 'PROJECT';
+  evaluationWeight: {
+    midterm: number;
+    final: number;
+    project?: number;
+    homework?: number;
+    attendance?: number;
+  };
 }
 
 const TeacherInfoSchema = new Schema({
@@ -57,7 +66,20 @@ const LectureSchema = new Schema({
   teacherInfo: { type: TeacherInfoSchema, required: true },
   parity: { type: String, enum: ['ODD', 'EVEN', 'ALL'], required: true },
   specializationShortName: { type: String, required: true },
-  studyYear: { type: Number, required: true }
+  studyYear: { type: Number, required: true },
+  credits: { type: Number, required: true, min: 1, max: 10 },
+  evaluationType: { 
+    type: String, 
+    enum: ['EXAM', 'COLLOQUIUM', 'PROJECT'],
+    required: true 
+  },
+  evaluationWeight: {
+    midterm: { type: Number, required: true, min: 0, max: 1 },
+    final: { type: Number, required: true, min: 0, max: 1 },
+    project: { type: Number, min: 0, max: 1 },
+    homework: { type: Number, min: 0, max: 1 },
+    attendance: { type: Number, min: 0, max: 1 }
+  }
 });
 
 // Create compound indexes for faster queries
