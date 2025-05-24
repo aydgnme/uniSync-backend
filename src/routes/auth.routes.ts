@@ -98,8 +98,9 @@ export default async function authRoutes(fastify: FastifyInstance) {
         200: { $ref: 'Success' },
         404: { $ref: 'Error' }
       }
-    }
-  }, AuthController.generateResetCode);
+    },
+    handler: AuthController.generateResetCode
+  });
 
   fastify.post('/verify-reset-code', {
     schema: {

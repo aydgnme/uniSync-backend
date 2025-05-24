@@ -108,7 +108,8 @@ export const AuthController = {
         user: {
           userId: user._id.toString(),
           email: user.email,
-          role: user.role || 'Student'
+          role: user.role || 'Student',
+          matriculationNumber: user.matriculationNumber
         }
       });
 
@@ -190,8 +191,11 @@ export const AuthController = {
 
   async generateResetCode(request: FastifyRequest<{ Body: { cnp: string; matriculationNumber: string } }>, reply: FastifyReply) {
     try {
+      console.log('Generating reset code for:', { cnp: request.body.cnp, matriculationNumber: request.body.matriculationNumber });
+      
       const parsed = generateResetCodeSchema.safeParse(request.body);
       if (!parsed.success) {
+        console.log('Reset code generation validation failed:', parsed.error.errors);
         return reply.code(400).send({ 
           message: 'Invalid user data',
           errors: parsed.error.errors 
@@ -204,6 +208,7 @@ export const AuthController = {
       );
 
       if (!user) {
+        console.log('User not found for reset code generation:', { cnp: parsed.data.cnp, matriculationNumber: parsed.data.matriculationNumber });
         return reply.code(404).send({ message: 'User not found' });
       }
 
@@ -211,11 +216,14 @@ export const AuthController = {
       const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
       const expiry = Date.now() + 10 * 60 * 1000; // 10 minutes
 
+      console.log('Generated reset code for user:', { userId: user._id, email: user.email });
+
       await UserService.setResetCode(parsed.data.cnp, parsed.data.matriculationNumber, resetCode, expiry);
       await sendPasswordResetCodeEmail(user.email, resetCode);
 
       return reply.code(200).send({ 
-        message: 'Password reset code sent to your email'
+        message: 'Password reset code sent to your email',
+        success: true
       });
     } catch (error) {
       console.error('Reset code generation error:', error);
@@ -338,7 +346,10 @@ export const AuthController = {
         role: 'Student',
         academicInfo: {
           ...parsed.data.academicInfo,
-          studentId: parsed.data.matriculationNumber
+          studentId: parsed.data.matriculationNumber,
+          studyYear: Math.ceil(parsed.data.academicInfo.semester / 2),
+          groupId: parsed.data.matriculationNumber,
+          isModular: false
         }
       };
 
@@ -354,7 +365,8 @@ export const AuthController = {
         user: {
           userId: user._id,
           email: user.email,
-          role: user.role
+          role: user.role,
+          matriculationNumber: user.matriculationNumber
         }
       });
 
