@@ -9,14 +9,15 @@ export default async function announcementRoutes(fastify: FastifyInstance) {
       schema: {
         tags: ['Announcements'],
         summary: 'Create announcement',
-        description: 'Create a new announcement for a lecture',
+        description: 'Create a new announcement',
         body: {
           type: 'object',
-          required: ['lecture', 'author', 'content'],
+          required: ['title', 'content', 'type'],
           properties: {
-            lecture: { type: 'string' },
-            author: { type: 'string' },
+            title: { type: 'string' },
             content: { type: 'string' },
+            type: { type: 'string', enum: ['Academic', 'Technical', 'General'] },
+            date: { type: 'string', format: 'date' },
             attachments: {
               type: 'array',
               items: { type: 'string' }
@@ -28,17 +29,17 @@ export default async function announcementRoutes(fastify: FastifyInstance) {
             type: 'object',
             properties: {
               id: { type: 'string' },
-              firebaseId: { type: 'string' },
-              message: { type: 'string' }
+              title: { type: 'string' },
+              content: { type: 'string' },
+              type: { type: 'string' },
+              date: { type: 'string' },
+              attachments: {
+                type: 'array',
+                items: { type: 'string' }
+              }
             }
           },
           400: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' }
-            }
-          },
-          500: {
             type: 'object',
             properties: {
               error: { type: 'string' }
@@ -65,15 +66,15 @@ export default async function announcementRoutes(fastify: FastifyInstance) {
               type: 'object',
               properties: {
                 id: { type: 'string' },
-                firebaseId: { type: 'string' },
-                message: { type: 'string' }
+                title: { type: 'string' },
+                content: { type: 'string' },
+                type: { type: 'string' },
+                date: { type: 'string' },
+                attachments: {
+                  type: 'array',
+                  items: { type: 'string' }
+                }
               }
-            }
-          },
-          500: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' }
             }
           }
         }
@@ -101,47 +102,18 @@ export default async function announcementRoutes(fastify: FastifyInstance) {
           200: {
             type: 'object',
             properties: {
-              _id: { type: 'string' },
-              lecture: {
-                type: 'object',
-                properties: {
-                  _id: { type: 'string' },
-                  name: { type: 'string' },
-                  code: { type: 'string' }
-                }
-              },
-              author: {
-                type: 'object',
-                properties: {
-                  _id: { type: 'string' },
-                  firstName: { type: 'string' },
-                  lastName: { type: 'string' },
-                  email: { type: 'string' }
-                }
-              },
+              id: { type: 'string' },
+              title: { type: 'string' },
               content: { type: 'string' },
+              type: { type: 'string' },
+              date: { type: 'string' },
               attachments: {
                 type: 'array',
                 items: { type: 'string' }
-              },
-              createdAt: { type: 'string', format: 'date-time' },
-              firebaseData: {
-                type: 'object',
-                nullable: true,
-                properties: {
-                  id: { type: 'string' },
-                  createdAt: { type: 'string', format: 'date-time' }
-                }
               }
             }
           },
           404: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' }
-            }
-          },
-          500: {
             type: 'object',
             properties: {
               error: { type: 'string' }
@@ -153,18 +125,18 @@ export default async function announcementRoutes(fastify: FastifyInstance) {
     getAnnouncementById
   );
 
-  // Get announcements by lecture
+  // Get announcements by type
   fastify.get(
-    '/lecture/:lecture',
+    '/type/:type',
     {
       schema: {
         tags: ['Announcements'],
-        summary: 'Get announcements by lecture',
-        description: 'Retrieve all announcements for a specific lecture',
+        summary: 'Get announcements by type',
+        description: 'Retrieve all announcements of a specific type',
         params: {
           type: 'object',
           properties: {
-            lecture: { type: 'string' }
+            type: { type: 'string', enum: ['Academic', 'Technical', 'General'] }
           }
         },
         response: {
@@ -174,21 +146,15 @@ export default async function announcementRoutes(fastify: FastifyInstance) {
               type: 'object',
               properties: {
                 id: { type: 'string' },
-                firebaseId: { type: 'string' },
-                message: { type: 'string' }
+                title: { type: 'string' },
+                content: { type: 'string' },
+                type: { type: 'string' },
+                date: { type: 'string' },
+                attachments: {
+                  type: 'array',
+                  items: { type: 'string' }
+                }
               }
-            }
-          },
-          404: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' }
-            }
-          },
-          500: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' }
             }
           }
         }

@@ -1,19 +1,39 @@
-import { Schema, model, Types, Document } from 'mongoose';
+import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IAnnouncement extends Document {
-  lecture: Types.ObjectId;
-  author: Types.ObjectId;
+  title: string;
   content: string;
-  createdAt: Date;
-  attachments?: string[];
+  type: 'Academic' | 'Technical' | 'General';
+  date: string;
+  attachments: string[];
 }
 
-const AnnouncementSchema = new Schema<IAnnouncement>({
-  lecture: { type: Schema.Types.ObjectId, ref: 'Lecture', required: true },
-  author: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  content: { type: String, required: true },
-  createdAt: { type: Date, default: Date.now },
-  attachments: [{ type: String }]
+const AnnouncementSchema = new Schema({
+  title: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  content: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  type: {
+    type: String,
+    required: true,
+    enum: ['Academic', 'Technical', 'General']
+  },
+  date: {
+    type: String,
+    required: true,
+    default: () => new Date().toISOString().split('T')[0]
+  },
+  attachments: [{
+    type: String
+  }]
+}, {
+  timestamps: true
 });
 
-export const Announcement = model<IAnnouncement>('Announcement', AnnouncementSchema); 
+export const Announcement = mongoose.model<IAnnouncement>('Announcement', AnnouncementSchema); 

@@ -4,34 +4,42 @@ import { FirebaseService } from '../services/firebase.service';
 
 // Add announcement to MongoDB and Firebase
 export const createAnnouncement = async (request: FastifyRequest, reply: FastifyReply) => {
-  // Required fields: lecture, author, content
-  const { lecture, author, content, attachments } = request.body as any;
+  const { title, content, type, date, attachments } = request.body as any;
 
-  if (!lecture || !author || !content) {
-    return reply.status(400).send({ error: 'Missing required fields.' });
+  if (!title || !content || !type) {
+    return reply.status(400).send({ error: 'Missing required fields: title, content, and type are required.' });
   }
 
   try {
     // Save to MongoDB
     const announcement = new Announcement({
-      lecture,
-      author,
+      title,
       content,
-      attachments
+      type,
+      date: date || new Date().toISOString().split('T')[0],
+      attachments: attachments || []
     });
     await announcement.save();
 
     // Save to Firestore (collection: announcements)
     const db = (FirebaseService as any).getDb();
     const docRef = await db.collection('announcements').add({
-      lecture: String(lecture),
-      author: String(author),
+      title,
       content,
+      type,
+      date: date || new Date().toISOString().split('T')[0],
       attachments: attachments || [],
       createdAt: new Date()
     });
 
-    return reply.status(201).send({ id: announcement._id, firebaseId: docRef.id, message: 'Announcement created.' });
+    return reply.status(201).send({
+      id: announcement._id,
+      title: announcement.title,
+      content: announcement.content,
+      type: announcement.type,
+      date: announcement.date,
+      attachments: announcement.attachments
+    });
   } catch (error) {
     return reply.status(500).send({ error: 'Failed to create announcement.' });
   }
@@ -40,7 +48,10 @@ export const createAnnouncement = async (request: FastifyRequest, reply: Fastify
 // Get all announcements
 export const getAnnouncements = async (request: FastifyRequest, reply: FastifyReply) => {
   try {
-    const announcements = await Announcement.find().sort({ createdAt: -1 });
+    const announcements = await Announcement.find()
+      .sort({ date: -1 })
+      .select('id title content type date attachments');
+
     return reply.status(200).send(announcements);
   } catch (error) {
     return reply.status(500).send({ error: 'Failed to fetch announcements.' });
@@ -53,38 +64,33 @@ export const getAnnouncementById = async (request: FastifyRequest, reply: Fastif
 
   try {
     const announcement = await Announcement.findById(id)
-      .populate('lecture', 'name code')
-      .populate('author', 'firstName lastName email');
+      .select('id title content type date attachments');
 
     if (!announcement) {
       return reply.status(404).send({ error: 'Announcement not found.' });
     }
 
-    // Get Firebase data
-    const db = (FirebaseService as any).getDb();
-    const firebaseDoc = await db.collection('announcements')
-      .where('mongoId', '==', id)
-      .get();
-
-    const firebaseData = firebaseDoc.empty ? null : firebaseDoc.docs[0].data();
-
-    return reply.send({
-      ...announcement.toJSON(),
-      firebaseData
-    });
+    return reply.send(announcement);
   } catch (error) {
     return reply.status(500).send({ error: 'Failed to get announcement.' });
   }
 };
 
-// Get announcements by lecture
+// Get announcements by type
 export const getAnnouncementsByLecture = async (request: FastifyRequest, reply: FastifyReply) => {
-  const { lecture } = request.params as any;
+  const { type } = request.params as { type: string };
+
+  if (!['Academic', 'Technical', 'General'].includes(type)) {
+    return reply.status(400).send({ error: 'Invalid announcement type.' });
+  }
 
   try {
-    const announcements = await Announcement.find({ lecture }).sort({ createdAt: -1 });
+    const announcements = await Announcement.find({ type })
+      .sort({ date: -1 })
+      .select('id title content type date attachments');
+
     return reply.status(200).send(announcements);
   } catch (error) {
-    return reply.status(500).send({ error: 'Failed to fetch announcements for lecture.' });
+    return reply.status(500).send({ error: 'Failed to fetch announcements by type.' });
   }
 };
