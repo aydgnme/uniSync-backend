@@ -1,11 +1,12 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { db } from '../database/firebase';
+import { getFirestore } from '../database/firebase';
 
 export const testFirebaseConnection = async (
   request: FastifyRequest,
   reply: FastifyReply
 ) => {
   try {
+    const db = getFirestore();
     const testDoc = await db.collection('test').doc('test').get();
 
     await db.collection('test').doc('test').set({
@@ -31,6 +32,7 @@ export const listFirebaseCollections = async (
   reply: FastifyReply
 ) => {
   try {
+    const db = getFirestore();
     const collections = await db.listCollections();
     const collectionNames = collections.map(col => col.id);
 
@@ -49,6 +51,7 @@ export const getCollectionDocuments = async (
   reply: FastifyReply
 ) => {
   try {
+    const db = getFirestore();
     const { collectionName } = request.params;
     const snapshot = await db.collection(collectionName).get();
 

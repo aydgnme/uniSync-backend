@@ -8,6 +8,8 @@ import jwt from '@fastify/jwt';
 import { schemas } from '../schemas/index';
 import { connectToMongoDB } from '../database/mongo';
 import { swaggerOptions } from '../config/swagger';
+import { registerRoutes } from '../routes';
+import path from 'path';
 
 const buildServer = async (): Promise<FastifyInstance> => {
   const app = Fastify({
@@ -68,14 +70,17 @@ const buildServer = async (): Promise<FastifyInstance> => {
   await app.register(formbody);
 
   // Register schemas
-  Object.entries(schemas).forEach(([name, schema]) => {
-    if (typeof schema === 'object') {
-      app.addSchema({
-        $id: name,
-        ...schema
-      });
-    }
-  });
+  const schemaEntries = Object.entries(schemas);
+  await Promise.all(
+    schemaEntries.map(async ([name, schema]) => {
+      if (typeof schema === 'object') {
+        app.addSchema({
+          $id: name,
+          ...schema
+        });
+      }
+    })
+  );
 
   // Register Swagger
   await app.register(swagger, {
@@ -100,28 +105,7 @@ const buildServer = async (): Promise<FastifyInstance> => {
   });
 
   // Register routes
-  const routes = [
-    { path: '../routes/auth.routes', prefix: '/api/auth' },
-    { path: '../routes/user.routes', prefix: '/api/users' },
-    { path: '../routes/homework.routes', prefix: '/api/homework' },
-    { path: '../routes/test.routes', prefix: '/api/test' },
-    { path: '../routes/schedule.routes', prefix: '/api/schedule' },
-    { path: '../routes/course-grade.routes', prefix: '/api/course-grades' },
-    { path: '../routes/gridfs.routes', prefix: '/api/files' }
-  ];
-
-  for (const route of routes) {
-    try {
-      const routeModule = await import(route.path);
-      if (typeof routeModule.default === 'function') {
-        await app.register(routeModule.default, { prefix: route.prefix });
-      } else {
-        app.log.error(`Invalid route module: ${route.path}`);
-      }
-    } catch (error) {
-      app.log.error(`Failed to load route module: ${route.path}`, error);
-    }
-  }
+  await registerRoutes(app);
 
   // Health check endpoint
   app.get('/api/system/health', {
@@ -233,22 +217,27 @@ const buildServer = async (): Promise<FastifyInstance> => {
 
   // Add error logging
   app.setErrorHandler((error, request, reply) => {
+    const errorResponse = {
+      message: error.message || 'Internal Server Error',
+      code: error.code || 'INTERNAL_SERVER_ERROR',
+      statusCode: error.statusCode || 500,
+      timestamp: new Date().toISOString(),
+      path: request.url,
+      method: request.method
+    };
+
     request.log.error({
       err: {
-        message: error.message,
+        ...errorResponse,
         stack: error.stack,
-        code: error.code,
         type: error.name
       }
     }, 'Request error');
     
-    reply.status(error.statusCode || 500).send({
-      message: error.message || 'Internal Server Error',
-      code: error.code || 'INTERNAL_SERVER_ERROR'
-    });
+    reply.status(errorResponse.statusCode).send(errorResponse);
   });
 
   return app;
 };
 
-export { buildServer };
+export default buildServer;

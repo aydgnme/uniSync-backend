@@ -9,42 +9,6 @@ import { Types } from 'mongoose';
 import { logger } from '../utils/logger';
 
 export default async function userRoutes(fastify: FastifyInstance) {
-  // Check user existence (no auth required)
-  fastify.post('/check', {
-    schema: {
-      tags: ['Users'],
-      summary: 'Check user existence',
-      description: 'Check if a user exists with the given email and matriculation number',
-      body: {
-        type: 'object',
-        required: ['email', 'matriculationNumber'],
-        properties: {
-          email: { type: 'string', format: 'email' },
-          matriculationNumber: { type: 'string' }
-        }
-      },
-      response: {
-        200: {
-          type: 'object',
-          properties: {
-            message: { type: 'string' },
-            user: {
-              type: 'object',
-              properties: {
-                _id: { type: 'string' },
-                email: { type: 'string' },
-                name: { type: 'string' },
-                matriculationNumber: { type: 'string' }
-              }
-            }
-          }
-        },
-        400: { $ref: 'Error' },
-        404: { $ref: 'Error' }
-      }
-    }
-  }, AuthController.checkUser);
-
   // Add JWT authentication hook for protected routes
   fastify.addHook('onRequest', authJWT);
 

@@ -3,7 +3,7 @@ import { ClassroomController } from '../controllers/classroom.controller';
 
 const classroomController = new ClassroomController();
 
-export async function classroomRoutes(fastify: FastifyInstance) {
+export default async function classroomRoutes(fastify: FastifyInstance) {
   /**
    * @swagger
    * /classroom/courses/{studentId}:
@@ -24,7 +24,7 @@ export async function classroomRoutes(fastify: FastifyInstance) {
    *       404:
    *         description: Student not found
    */
-  fastify.get('/classroom/courses/:studentId', {
+  fastify.get('/courses/:studentId', {
     schema: {
       description: 'Get all courses for a student',
       tags: ['Classroom'],
@@ -63,7 +63,7 @@ export async function classroomRoutes(fastify: FastifyInstance) {
    *       404:
    *         description: Lecture not found
    */
-  fastify.get('/classroom/stream/:lectureId', classroomController.getLectureStream.bind(classroomController));
+  fastify.get('/stream/:lectureId', classroomController.getLectureStream.bind(classroomController));
 
   /**
    * @swagger
@@ -85,7 +85,7 @@ export async function classroomRoutes(fastify: FastifyInstance) {
    *       404:
    *         description: Lecture not found
    */
-  fastify.get('/classroom/classwork/:lectureId', classroomController.getLectureClasswork.bind(classroomController));
+  fastify.get('/classwork/:lectureId', classroomController.getLectureClasswork.bind(classroomController));
 
   /**
    * @swagger
@@ -107,5 +107,5 @@ export async function classroomRoutes(fastify: FastifyInstance) {
    *       404:
    *         description: Lecture not found
    */
-  fastify.get('/classroom/people/:lectureId', classroomController.getLecturePeople.bind(classroomController));
+  fastify.get('/people/:lectureId', classroomController.getLecturePeople.bind(classroomController));
 } 

@@ -438,7 +438,7 @@ export default async function homeworkRoutes(fastify: FastifyInstance) {
         type: 'object',
         required: ['grade'],
         properties: {
-          grade: { type: 'number', minimum: 1, maximum: 10 },
+          grade: { type: 'number', minimum: 0, maximum: 10 },
           feedback: { type: 'string' }
         }
       },
@@ -446,28 +446,8 @@ export default async function homeworkRoutes(fastify: FastifyInstance) {
         200: {
           type: 'object',
           properties: {
-            _id: { type: 'string' },
-            lecture: { type: 'object' },
-            lectureCode: { type: 'string' },
-            group: { type: 'string' },
-            subgroup: { type: 'string' },
-            title: { type: 'string' },
-            description: { type: 'string' },
-            dueDate: { type: 'string', format: 'date-time' },
-            isUnlimited: { type: 'boolean' },
-            student: { type: 'object' },
-            fileId: { type: 'string' },
-            fileName: { type: 'string' },
-            submittedAt: { type: 'string', format: 'date-time' },
-            status: { type: 'string', enum: ['pending', 'submitted', 'graded'] },
-            grade: { type: 'number' },
-            feedback: { type: 'string' }
-          }
-        },
-        400: {
-          type: 'object',
-          properties: {
-            error: { type: 'string' }
+            message: { type: 'string' },
+            homework: { type: 'object' }
           }
         },
         404: {
@@ -485,4 +465,4 @@ export default async function homeworkRoutes(fastify: FastifyInstance) {
       }
     }
   }, homeworkController.gradeHomework);
-} 
+}

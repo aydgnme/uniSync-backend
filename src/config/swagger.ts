@@ -130,6 +130,36 @@ export const swaggerOptions: FastifyDynamicSwaggerOptions = {
             },
             passRate: { type: 'number' }
           }
+        },
+        Announcement: {
+          type: 'object',
+          required: ['lecture', 'author', 'content'],
+          properties: {
+            _id: { type: 'string' },
+            lecture: { type: 'string', description: 'Lecture ID' },
+            author: { type: 'string', description: 'Author (User) ID' },
+            content: { type: 'string', description: 'Announcement content' },
+            createdAt: { type: 'string', format: 'date-time' },
+            attachments: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Attachment URLs'
+            }
+          }
+        },
+        AnnouncementCreate: {
+          type: 'object',
+          required: ['lecture', 'author', 'content'],
+          properties: {
+            lecture: { type: 'string', description: 'Lecture ID' },
+            author: { type: 'string', description: 'Author (User) ID' },
+            content: { type: 'string', description: 'Announcement content' },
+            attachments: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Attachment URLs'
+            }
+          }
         }
       }
     },
@@ -138,7 +168,8 @@ export const swaggerOptions: FastifyDynamicSwaggerOptions = {
       { name: 'Users', description: 'User management endpoints' },
       { name: 'Homework', description: 'Homework management endpoints' },
       { name: 'Grades', description: 'Course grade management endpoints' },
-      { name: 'System', description: 'System management endpoints' }
+      { name: 'System', description: 'System management endpoints' },
+      { name: 'Announcements', description: 'Announcement management endpoints' }
     ]
   }
 }; 
