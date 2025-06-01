@@ -1,388 +1,492 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { UserService } from '../services/user.service';
-import { IUserBase } from '../models/user.model';
 import { z } from 'zod';
-import { v4 as uuidv4 } from 'uuid';
 import { sendPasswordResetCodeEmail } from '../services/email.service';
-import * as bcrypt from 'bcryptjs';
+import { AuthService } from '../services/auth.service';
+import { supabase } from '../lib/supabase';
+import { logger } from '../utils/logger';
+import bcrypt from 'bcrypt';
+import { config } from '../config';
+import {
+  registerSchema,
+  loginSchema,
+  generateResetCodeSchema,
+  verifyResetCodeSchema,
+  resetPasswordSchema,
+  checkUserSchema,
+  findUserSchema
+} from '../schemas/auth.schemas';
 
-const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6)
-});
-
-const findUserSchema = z.object({
-  cnp: z.string(),
-  matriculationNumber: z.string()
-});
-
-const checkUserSchema = z.object({
-  email: z.string().email(),
-  matriculationNumber: z.string()
-});
-
-const generateResetCodeSchema = z.object({
-  cnp: z.string(),
-  matriculationNumber: z.string()
-});
-
-const resetPasswordSchema = z.object({
-  cnp: z.string(),
-  matriculationNumber: z.string(),
-  code: z.string(),
-  newPassword: z.string().min(6),
-  confirmPassword: z.string().min(6)
-}).refine((data) => data.newPassword === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ["confirmPassword"]
-});
-
-const verifyResetCodeSchema = z.object({
-  cnp: z.string(),
-  matriculationNumber: z.string(),
-  code: z.string().length(6, 'Reset code must be 6 digits')
-});
-
-const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
-  name: z.string(),
-  cnp: z.string(),
-  matriculationNumber: z.string(),
-  phone: z.string().optional(),
-  address: z.string().optional(),
-  academicInfo: z.object({
-    program: z.string(),
-    semester: z.number(),
-    groupName: z.string(),
-    subgroupIndex: z.string(),
-    advisor: z.string(),
-    gpa: z.number(),
-    specializationShortName: z.string(),
-    facultyId: z.string()
-  })
-});
+interface JwtPayload {
+  tokenType: string;
+  user: {
+    userId: string;
+    email: string;
+    role: string;
+    first_name: string;
+    last_name: string;
+    matriculationNumber: string;
+    iat?: number;
+    exp?: number;
+  };
+}
 
 export const AuthController = {
-  async login(request: FastifyRequest<{ Body: { email: string; password: string } }>, reply: FastifyReply) {
+
+  async login(request: FastifyRequest<{ Body: z.infer<typeof loginSchema> }>, reply: FastifyReply) {
     try {
-      const parsed = loginSchema.safeParse(request.body);
-      if (!parsed.success) {
-        console.log('Login validation failed:', parsed.error.errors);
-        return reply.code(400).send({ 
-          message: 'Invalid login data',
-          errors: parsed.error.errors 
+      const body = loginSchema.parse(request.body);
+      logger.info('Login attempt:', { email: body.email });
+
+      // Get user from database
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('*, students(*)')
+        .eq('email', body.email)
+        .single();
+
+      if (userError || !user) {
+        logger.warn('User not found:', { email: body.email });
+        return reply.code(401).send({
+          message: 'Invalid email or password',
+          code: 'INVALID_CREDENTIALS'
         });
       }
 
-      const normalizedEmail = parsed.data.email.toLowerCase().trim();
-      console.log('Attempting login for normalized email:', normalizedEmail);
-      
-      const user = await UserService.getUserByEmail(normalizedEmail, true);
-      if (!user) {
-        console.log('User not found for email:', normalizedEmail);
-        return reply.code(401).send({ message: 'Invalid email or password' });
+      // Verify password
+      const isValidPassword = await bcrypt.compare(body.password, user.password_hash);
+      if (!isValidPassword) {
+        logger.warn('Invalid password:', { email: body.email });
+        return reply.code(401).send({
+          message: 'Invalid email or password',
+          code: 'INVALID_CREDENTIALS'
+        });
       }
 
-      console.log('User found:', {
-        userId: user._id,
+      // Generate JWT token
+      const token = request.server.jwt.sign({
+        userId: user.id,
         email: user.email,
-        hasPassword: !!user.password,
-        passwordLength: user.password?.length
+        role: user.role
+      }, {
+        expiresIn: '24h'
       });
 
-      const isPasswordValid = await bcrypt.compare(parsed.data.password, user.password);
-      console.log('Password validation details:', {
-        isPasswordValid,
-        inputPasswordLength: parsed.data.password.length,
-        storedPasswordLength: user.password.length
-      });
+      logger.info('Login successful:', { userId: user.id });
 
-      if (!isPasswordValid) {
-        console.log('Invalid password for user:', user.email);
-        return reply.code(401).send({ message: 'Invalid email or password' });
-      }
-
-      const token = request.server.jwt.sign({ 
-        tokenType: 'access',
-        user: {
-          userId: user._id.toString(),
-          email: user.email,
-          role: user.role || 'Student',
-          matriculationNumber: user.matriculationNumber
-        }
-      });
-
-      console.log('Login successful for user:', user.email);
-      return reply.code(200).send({ 
+      return reply.code(200).send({
         token,
         user: {
-          _id: user._id,
+          id: user.id,
           email: user.email,
-          name: user.name,
-          role: user.role || 'Student'
+          first_name: user.first_name,
+          last_name: user.last_name,
+          role: user.role,
+          phone_number: user.phone_number,
+          gender: user.gender,
+          date_of_birth: user.date_of_birth,
+          nationality: user.nationality,
+          matriculation_number: user.students?.matriculation_number
         }
       });
     } catch (error) {
-      console.error('Login error:', error);
-      return reply.code(500).send({ message: 'Internal server error' });
-    }
-  },
-
-  async checkUser(request: FastifyRequest<{ Body: { email: string; matriculationNumber: string } }>, reply: FastifyReply) {
-    try {
-      const parsed = checkUserSchema.safeParse(request.body);
-      if (!parsed.success) {
-        return reply.code(400).send({ 
-          message: 'Invalid user data',
-          errors: parsed.error.errors 
+      logger.error('Login error:', error);
+      if (error instanceof z.ZodError) {
+        return reply.code(400).send({
+          message: 'Validation error',
+          code: 'VALIDATION_ERROR',
+          details: error.errors.map(err => ({
+            path: err.path.join('.'),
+            message: err.message
+          }))
         });
       }
-
-      const user = await UserService.getUserByEmail(parsed.data.email);
-      if (!user) {
-        return reply.code(404).send({ message: 'User not found' });
-      }
-
-      if (user.matriculationNumber !== parsed.data.matriculationNumber) {
-        return reply.code(400).send({ message: 'Matriculation number does not match' });
-      }
-
-      return reply.code(200).send({ 
-        message: 'User verified successfully',
-        user: {
-          _id: user._id,
-          email: user.email,
-          name: user.name,
-          matriculationNumber: user.matriculationNumber
-        }
+      return reply.code(401).send({
+        message: 'Invalid email or password',
+        code: 'INVALID_CREDENTIALS'
       });
-    } catch (error) {
-      console.error('Check user error:', error);
-      return reply.code(500).send({ message: 'Internal server error' });
     }
   },
 
-  async findUserByCnpAndMatriculation(request: FastifyRequest<{ Body: { cnp: string; matriculationNumber: string } }>, reply: FastifyReply) {
+  async generateResetCode(request: FastifyRequest<{ Body: z.infer<typeof generateResetCodeSchema> }>, reply: FastifyReply) {
     try {
-      const parsed = findUserSchema.safeParse(request.body);
-      if (!parsed.success) {
-        return reply.code(400).send({ 
-          message: 'Invalid user data',
-          errors: parsed.error.errors 
+      const body = generateResetCodeSchema.parse(request.body);
+      logger.info('Generate reset code request:', {
+        cnp: body.cnp,
+        matriculationNumber: body.matriculationNumber
+      });
+
+      // Find student by CNP and matriculation number
+      const { data: student, error: studentError } = await supabase
+        .from('students')
+        .select('*, users!inner(*)')
+        .eq('cnp', body.cnp)
+        .eq('matriculation_number', body.matriculationNumber)
+        .single();
+
+      if (studentError || !student) {
+        logger.warn('Student not found:', {
+          cnp: body.cnp,
+          matriculationNumber: body.matriculationNumber
+        });
+        return reply.code(404).send({
+          message: 'Student not found',
+          code: 'STUDENT_NOT_FOUND'
         });
       }
 
-      const user = await UserService.findUserByCnpAndMatriculation(
-        parsed.data.cnp,
-        parsed.data.matriculationNumber
-      );
+      // Generate reset code
+      const reset_code = Math.floor(100000 + Math.random() * 900000).toString();
+      const expires_at = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 minutes in UTC
 
-      if (!user) {
-        return reply.code(404).send({ message: 'User not found' });
-      }
-
-      return reply.code(200).send({ user });
-    } catch (error) {
-      console.error('Find user error:', error);
-      return reply.code(500).send({ message: 'Internal server error' });
-    }
-  },
-
-  async generateResetCode(request: FastifyRequest<{ Body: { cnp: string; matriculationNumber: string } }>, reply: FastifyReply) {
-    try {
-      console.log('Generating reset code for:', { cnp: request.body.cnp, matriculationNumber: request.body.matriculationNumber });
-      
-      const parsed = generateResetCodeSchema.safeParse(request.body);
-      if (!parsed.success) {
-        console.log('Reset code generation validation failed:', parsed.error.errors);
-        return reply.code(400).send({ 
-          message: 'Invalid user data',
-          errors: parsed.error.errors 
+      // Store reset code
+      const { error: resetError } = await supabase
+        .from('password_reset_requests')
+        .insert({
+          cnp: body.cnp,
+          matriculation_number: body.matriculationNumber,
+          reset_code,
+          expires_at
         });
+
+      if (resetError) {
+        logger.error('Error storing reset code:', resetError);
+        throw resetError;
       }
 
-      const user = await UserService.findUserByCnpAndMatriculation(
-        parsed.data.cnp,
-        parsed.data.matriculationNumber
-      );
-
-      if (!user) {
-        console.log('User not found for reset code generation:', { cnp: parsed.data.cnp, matriculationNumber: parsed.data.matriculationNumber });
-        return reply.code(404).send({ message: 'User not found' });
+      // Send email
+      try {
+        await sendPasswordResetCodeEmail(student.users.email, reset_code);
+      } catch (emailError) {
+        logger.error('Error sending reset code email:', emailError);
+        // Delete the reset code if email sending fails
+        await supabase
+          .from('password_reset_requests')
+          .delete()
+          .eq('cnp', body.cnp)
+          .eq('matriculation_number', body.matriculationNumber)
+          .eq('reset_code', reset_code);
+        throw emailError;
       }
 
-      // Generate 6-digit code
-      const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
-      const expiry = Date.now() + 10 * 60 * 1000; // 10 minutes
+      logger.info('Reset code generated successfully:', { userId: student.user_id });
 
-      console.log('Generated reset code for user:', { userId: user._id, email: user.email });
-
-      await UserService.setResetCode(parsed.data.cnp, parsed.data.matriculationNumber, resetCode, expiry);
-      await sendPasswordResetCodeEmail(user.email, resetCode);
-
-      return reply.code(200).send({ 
+      return reply.code(200).send({
         message: 'Password reset code sent to your email',
         success: true
       });
     } catch (error) {
-      console.error('Reset code generation error:', error);
-      return reply.code(500).send({ message: 'Internal server error' });
+      logger.error('Generate reset code error:', error);
+      if (error instanceof z.ZodError) {
+        return reply.code(400).send({
+          message: 'Validation error',
+          code: 'VALIDATION_ERROR',
+          details: error.errors.map(err => ({
+            path: err.path.join('.'),
+            message: err.message
+          }))
+        });
+      }
+      return reply.code(500).send({
+        message: 'Failed to generate reset code',
+        code: 'RESET_CODE_GENERATION_FAILED'
+      });
     }
   },
 
-  async resetPassword(request: FastifyRequest<{ Body: { cnp: string; matriculationNumber: string; code: string; newPassword: string; confirmPassword: string } }>, reply: FastifyReply) {
+  async verifyResetCode(request: FastifyRequest<{ Body: z.infer<typeof verifyResetCodeSchema> }>, reply: FastifyReply) {
     try {
-      const parsed = resetPasswordSchema.safeParse(request.body);
-      if (!parsed.success) {
-        return reply.code(400).send({ 
-          message: 'Invalid reset data',
-          errors: parsed.error.errors 
+      const body = verifyResetCodeSchema.parse(request.body);
+      logger.info('Verify reset code request:', {
+        cnp: body.cnp,
+        matriculationNumber: body.matriculationNumber
+      });
+
+      // Find student by CNP and matriculation number
+      const { data: student, error: studentError } = await supabase
+        .from('students')
+        .select('*, users!inner(*)')
+        .eq('cnp', body.cnp)
+        .eq('matriculation_number', body.matriculationNumber)
+        .single();
+
+      if (studentError || !student) {
+        logger.warn('Student not found:', {
+          cnp: body.cnp,
+          matriculationNumber: body.matriculationNumber
+        });
+        return reply.code(404).send({
+          message: 'Student not found',
+          code: 'STUDENT_NOT_FOUND'
         });
       }
 
-      const user = await UserService.findUserByCnpAndMatriculation(
-        parsed.data.cnp,
-        parsed.data.matriculationNumber
-      );
+      // Verify reset code
+      const { data: reset, error: resetError } = await supabase
+        .from('password_reset_requests')
+        .select('*')
+        .eq('cnp', body.cnp)
+        .eq('matriculation_number', body.matriculationNumber)
+        .eq('reset_code', body.reset_code)
+        .gt('expires_at', new Date().toISOString())
+        .single();
 
-      if (!user) {
-        return reply.code(404).send({ message: 'User not found' });
-      }
-
-      const isValid = await UserService.verifyResetCode(
-        parsed.data.cnp,
-        parsed.data.matriculationNumber,
-        parsed.data.code
-      );
-
-      if (!isValid) {
-        return reply.code(400).send({ message: 'Invalid or expired reset code' });
-      }
-
-      const updatedUser = await UserService.updatePasswordByCnpAndMatriculation(
-        parsed.data.cnp,
-        parsed.data.matriculationNumber,
-        parsed.data.newPassword
-      );
-
-      if (!updatedUser) {
-        return reply.code(500).send({ message: 'Failed to update password' });
-      }
-
-      return reply.code(200).send({ message: 'Password reset successful' });
-    } catch (error) {
-      console.error('Password reset error:', error);
-      return reply.code(500).send({ message: 'Internal server error' });
-    }
-  },
-
-  async verifyResetCode(request: FastifyRequest<{ Body: { cnp: string; matriculationNumber: string; code: string } }>, reply: FastifyReply) {
-    try {
-      const parsed = verifyResetCodeSchema.safeParse(request.body);
-      if (!parsed.success) {
-        return reply.code(400).send({ 
-          message: 'Invalid data',
-          errors: parsed.error.errors 
+      if (resetError || !reset) {
+        logger.warn('Invalid or expired reset code:', {
+          cnp: body.cnp,
+          matriculationNumber: body.matriculationNumber
+        });
+        return reply.code(400).send({
+          message: 'Invalid or expired reset code',
+          code: 'INVALID_RESET_CODE'
         });
       }
 
-      const user = await UserService.findUserByCnpAndMatriculation(
-        parsed.data.cnp,
-        parsed.data.matriculationNumber
-      );
+      logger.info('Reset code verified successfully:', { userId: student.user_id });
 
-      if (!user) {
-        return reply.code(404).send({ message: 'User not found' });
-      }
-
-      const isValid = await UserService.verifyResetCode(
-        parsed.data.cnp,
-        parsed.data.matriculationNumber,
-        parsed.data.code
-      );
-
-      if (!isValid) {
-        return reply.code(400).send({ message: 'Invalid or expired reset code' });
-      }
-
-      return reply.code(200).send({ 
+      return reply.code(200).send({
         message: 'Reset code verified successfully',
         isValid: true
       });
     } catch (error) {
-      console.error('Reset code verification error:', error);
-      return reply.code(500).send({ message: 'Internal server error' });
+      logger.error('Verify reset code error:', error);
+      if (error instanceof z.ZodError) {
+        return reply.code(400).send({
+          message: 'Validation error',
+          code: 'VALIDATION_ERROR',
+          details: error.errors.map(err => ({
+            path: err.path.join('.'),
+            message: err.message
+          }))
+        });
+      }
+      return reply.code(400).send({
+        message: 'Invalid or expired reset code',
+        code: 'INVALID_RESET_CODE'
+      });
     }
   },
 
-  async register(request: FastifyRequest<{ Body: z.infer<typeof registerSchema> }>, reply: FastifyReply) {
+  async resetPassword(request: FastifyRequest<{ Body: z.infer<typeof resetPasswordSchema> }>, reply: FastifyReply) {
     try {
-      const parsed = registerSchema.safeParse(request.body);
-      if (!parsed.success) {
-        console.log('Registration validation failed:', parsed.error.errors);
-        return reply.code(400).send({ 
-          message: 'Invalid registration data',
-          errors: parsed.error.errors 
+      const body = resetPasswordSchema.parse(request.body);
+      logger.info('Reset password request:', {
+        cnp: body.cnp,
+        matriculationNumber: body.matriculationNumber
+      });
+
+      // Validate passwords match
+      if (body.newPassword !== body.confirmPassword) {
+        return reply.code(400).send({
+          message: 'Passwords do not match',
+          code: 'PASSWORDS_DONT_MATCH'
         });
       }
 
-      console.log('Attempting registration for email:', parsed.data.email);
-      
-      const existingUser = await UserService.getUserByEmail(parsed.data.email);
-      if (existingUser) {
-        console.log('Email already registered:', parsed.data.email);
-        return reply.code(400).send({ message: 'Email already registered' });
+      // Find student by CNP and matriculation number
+      const { data: student, error: studentError } = await supabase
+        .from('students')
+        .select('*, users!inner(*)')
+        .eq('cnp', body.cnp)
+        .eq('matriculation_number', body.matriculationNumber)
+        .single();
+
+      if (studentError || !student) {
+        logger.warn('Student not found:', {
+          cnp: body.cnp,
+          matriculationNumber: body.matriculationNumber
+        });
+        return reply.code(404).send({
+          message: 'Student not found',
+          code: 'STUDENT_NOT_FOUND'
+        });
       }
 
-      const userData: IUserBase = {
-        email: parsed.data.email,
-        password: parsed.data.password,
-        name: parsed.data.name,
-        cnp: parsed.data.cnp,
-        matriculationNumber: parsed.data.matriculationNumber,
-        phone: parsed.data.phone || '',
-        address: parsed.data.address || '',
-        role: 'Student',
-        academicInfo: {
-          ...parsed.data.academicInfo,
-          studentId: parsed.data.matriculationNumber,
-          studyYear: Math.ceil(parsed.data.academicInfo.semester / 2),
-          groupId: parsed.data.matriculationNumber,
-          isModular: false
-        }
-      };
+      // Verify reset code
+      const { data: reset, error: resetError } = await supabase
+        .from('password_reset_requests')
+        .select('*')
+        .eq('cnp', body.cnp)
+        .eq('matriculation_number', body.matriculationNumber)
+        .eq('reset_code', body.code)
+        .gt('expires_at', new Date().toISOString())
+        .single();
 
-      const user = await UserService.createUser(userData);
+      if (resetError || !reset) {
+        logger.warn('Invalid or expired reset code:', {
+          cnp: body.cnp,
+          matriculationNumber: body.matriculationNumber
+        });
+        return reply.code(400).send({
+          message: 'Invalid or expired reset code',
+          code: 'INVALID_RESET_CODE'
+        });
+      }
 
-      console.log('User registered successfully:', {
-        userId: user._id,
-        email: user.email
+      // Hash new password
+      const password_hash = await bcrypt.hash(body.newPassword, 10);
+
+      // Update password
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ password_hash })
+        .eq('id', student.user_id);
+
+      if (updateError) {
+        logger.error('Error updating password:', updateError);
+        throw updateError;
+      }
+
+      // Delete used reset code
+      await supabase
+        .from('password_reset_requests')
+        .delete()
+        .eq('id', reset.id);
+
+      logger.info('Password reset successful:', { userId: student.user_id });
+
+      return reply.code(200).send({
+        message: 'Password reset successful'
       });
-
-      const token = request.server.jwt.sign({ 
-        tokenType: 'access',
-        user: {
-          userId: user._id,
-          email: user.email,
-          role: user.role,
-          matriculationNumber: user.matriculationNumber
-        }
+    } catch (error) {
+      logger.error('Reset password error:', error);
+      if (error instanceof z.ZodError) {
+        return reply.code(400).send({
+          message: 'Validation error',
+          code: 'VALIDATION_ERROR',
+          details: error.errors.map(err => ({
+            path: err.path.join('.'),
+            message: err.message
+          }))
+        });
+      }
+      return reply.code(400).send({
+        message: 'Password reset failed',
+        code: 'PASSWORD_RESET_FAILED'
       });
+    }
+  },
 
-      return reply.code(201).send({ 
-        token,
+  async checkUser(request: FastifyRequest<{ Body: z.infer<typeof checkUserSchema> }>, reply: FastifyReply) {
+    try {
+      const body = checkUserSchema.parse(request.body);
+      logger.info('Check user request:', { email: body.email });
+
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('*, students(*)')
+        .eq('email', body.email)
+        .single();
+
+      if (userError || !user) {
+        logger.warn('User not found:', { email: body.email });
+        return reply.code(404).send({
+          message: 'User not found',
+          code: 'USER_NOT_FOUND'
+        });
+      }
+
+      logger.info('User verified successfully:', { userId: user.id });
+
+      return reply.code(200).send({
+        message: 'User verified successfully',
         user: {
-          _id: user._id,
+          id: user.id,
           email: user.email,
-          name: user.name,
-          role: user.role,
-          academicInfo: user.academicInfo
+          first_name: user.first_name,
+          last_name: user.last_name,
+          matriculation_number: user.students?.matriculation_number
         }
       });
     } catch (error) {
-      console.error('Registration error:', error);
-      return reply.code(500).send({ message: 'Internal server error' });
+      logger.error('Check user error:', error);
+      if (error instanceof z.ZodError) {
+        return reply.code(400).send({
+          message: 'Validation error',
+          code: 'VALIDATION_ERROR',
+          details: error.errors.map(err => ({
+            path: err.path.join('.'),
+            message: err.message
+          }))
+        });
+      }
+      return reply.code(404).send({
+        message: 'User not found',
+        code: 'USER_NOT_FOUND'
+      });
+    }
+  },
+
+  async findUserByCnpAndMatriculation(request: FastifyRequest<{ Body: z.infer<typeof findUserSchema> }>, reply: FastifyReply) {
+    try {
+      const body = findUserSchema.parse(request.body);
+      logger.info('Find user request:', {
+        cnp: body.cnp,
+        matriculationNumber: body.matriculationNumber
+      });
+
+      const { data: student, error: studentError } = await supabase
+        .from('students')
+        .select('*, users!inner(*)')
+        .eq('cnp', body.cnp)
+        .eq('matriculation_number', body.matriculationNumber)
+        .single();
+
+      if (studentError || !student) {
+        logger.warn('Student not found:', {
+          cnp: body.cnp,
+          matriculationNumber: body.matriculationNumber
+        });
+        return reply.code(404).send({
+          message: 'Student not found',
+          code: 'STUDENT_NOT_FOUND'
+        });
+      }
+
+      logger.info('Student found successfully:', { userId: student.user_id });
+
+      return reply.code(200).send({
+        user: {
+          id: student.users.id,
+          email: student.users.email,
+          first_name: student.users.first_name,
+          last_name: student.users.last_name,
+          matriculation_number: student.matriculation_number,
+          cnp: student.cnp,
+          role: student.users.role
+        }
+      });
+    } catch (error) {
+      logger.error('Find user error:', error);
+      if (error instanceof z.ZodError) {
+        return reply.code(400).send({
+          message: 'Validation error',
+          code: 'VALIDATION_ERROR',
+          details: error.errors.map(err => ({
+            path: err.path.join('.'),
+            message: err.message
+          }))
+        });
+      }
+      return reply.code(404).send({
+        message: 'Student not found',
+        code: 'STUDENT_NOT_FOUND'
+      });
+    }
+  },
+
+  async logout(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      logger.info('Logout request');
+      return reply.code(200).send({
+        message: 'Logout successful',
+        success: true
+      });
+    } catch (error) {
+      logger.error('Logout error:', error);
+      return reply.code(500).send({
+        message: 'Server error',
+        code: 'INTERNAL_SERVER_ERROR'
+      });
     }
   }
 }; 

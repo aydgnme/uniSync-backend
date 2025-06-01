@@ -6,10 +6,8 @@ import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import jwt from '@fastify/jwt';
 import { schemas } from '../schemas/index';
-import { connectToMongoDB } from '../database/mongo';
 import { swaggerOptions } from '../config/swagger';
 import { registerRoutes } from '../routes';
-import path from 'path';
 
 const buildServer = async (): Promise<FastifyInstance> => {
   const app = Fastify({

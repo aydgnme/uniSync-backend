@@ -1,95 +1,41 @@
-import mongoose, { Document, Schema } from 'mongoose';
-import { v4 as uuidv4 } from 'uuid';
+import { supabase } from '../lib/supabase';
 
-export interface IApiKey extends Document {
+export interface ApiKey {
+  id: string;
   key: string;
   name: string;
   description?: string;
   isActive: boolean;
-  usageCount: number;
-  usageLimit?: number;
   expiresAt?: Date;
+  usageLimit?: number;
+  usageCount: number;
   createdAt: Date;
   updatedAt: Date;
-  lastUsedAt?: Date;
-  createdBy: string;
-  allowedIPs?: string[];
-  allowedDomains?: string[];
 }
 
-const ApiKeySchema = new Schema<IApiKey>({
-  key: {
-    type: String,
-    required: true,
-    unique: true,
-    default: () => uuidv4()
-  },
-  name: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  description: {
-    type: String,
-    trim: true
-  },
-  isActive: {
-    type: Boolean,
-    default: true
-  },
-  usageCount: {
-    type: Number,
-    default: 0
-  },
-  usageLimit: {
-    type: Number
-  },
-  expiresAt: {
-    type: Date
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
-  },
-  lastUsedAt: {
-    type: Date
-  },
-  createdBy: {
-    type: String,
-    required: true
-  },
-  allowedIPs: [{
-    type: String,
-    trim: true
-  }],
-  allowedDomains: [{
-    type: String,
-    trim: true
-  }]
-});
+export default {
+  async findOne(query: Partial<ApiKey>): Promise<ApiKey | null> {
+    const { data, error } = await supabase
+      .from('api_keys')
+      .select('*')
+      .match(query)
+      .single();
 
-// Middleware: Update timestamp on save
-ApiKeySchema.pre('save', function(next) {
-  this.updatedAt = new Date();
-  next();
-});
+    if (error || !data) {
+      return null;
+    }
 
-// Middleware: Update lastUsedAt on usage
-ApiKeySchema.pre('findOneAndUpdate', function(next) {
-  this.set({ lastUsedAt: new Date() });
-  next();
-});
+    return data as ApiKey;
+  },
 
-// Indexes
-ApiKeySchema.index({ key: 1 });
-ApiKeySchema.index({ isActive: 1 });
-ApiKeySchema.index({ expiresAt: 1 });
-ApiKeySchema.index({ createdBy: 1 });
+  async updateOne(query: { _id: string }, update: Partial<ApiKey>): Promise<void> {
+    const { error } = await supabase
+      .from('api_keys')
+      .update(update)
+      .eq('id', query._id);
 
-const ApiKey = mongoose.model<IApiKey>('ApiKey', ApiKeySchema);
-
-export default ApiKey;
+    if (error) {
+      throw error;
+    }
+  }
+}; 

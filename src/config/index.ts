@@ -4,6 +4,7 @@ export const config = {
     refresh: 'refresh'
   },
   jwt: {
+    secret: process.env.JWT_SECRET || 'your-secret-key',
     accessTokenExpiresIn: '24h',
     refreshTokenExpiresIn: '7d'
   },

@@ -1,10 +1,14 @@
 import { FastifyInstance } from 'fastify';
 import { CourseGradeController } from '../controllers/course-grade.controller';
 import { courseGradeSchema, courseGradeUpdateSchema, gradeReviewSchema, structuredGradesSchema, lectureStatisticsSchema } from '../schemas/course-grade.schemas';
+import { authJWT } from '../middlewares/auth.jwt.middleware';
 
 const courseGradeController = new CourseGradeController();
 
-export default async function (fastify: FastifyInstance) {
+export default async function courseGradeRoutes(fastify: FastifyInstance) {
+  // Add JWT authentication hook for all routes
+  fastify.addHook('onRequest', authJWT);
+
   // Register schemas for $ref resolution
   fastify.addSchema({ $id: 'CourseGrade', ...courseGradeSchema });
   fastify.addSchema({ $id: 'CourseGradeUpdate', ...courseGradeUpdateSchema });
@@ -12,15 +16,39 @@ export default async function (fastify: FastifyInstance) {
   fastify.addSchema({ $id: 'StructuredGrades', ...structuredGradesSchema });
   fastify.addSchema({ $id: 'LectureStatistics', ...lectureStatisticsSchema });
 
-  // Create a new course grade
+  // Create a new grade
   fastify.post('/', {
     schema: {
       tags: ['Grades'],
-      summary: 'Create a new course grade',
-      description: 'Create a new grade for a student in a specific lecture',
-      body: { $ref: 'CourseGrade' },
+      summary: 'Create a new grade',
+      description: 'Create a new grade for a student in a specific course',
+      body: {
+        type: 'object',
+        required: ['student_id', 'course_id', 'exam_type', 'score', 'letter_grade', 'graded_at', 'created_by'],
+        properties: {
+          student_id: { type: 'string', format: 'uuid' },
+          course_id: { type: 'string', format: 'uuid' },
+          exam_type: { type: 'string', enum: ['midterm', 'final', 'project', 'homework'] },
+          score: { type: 'number' },
+          letter_grade: { type: 'string' },
+          graded_at: { type: 'string', format: 'date-time' },
+          created_by: { type: 'string', format: 'uuid' }
+        }
+      },
       response: {
-        201: { $ref: 'CourseGrade' },
+        201: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            student_id: { type: 'string', format: 'uuid' },
+            course_id: { type: 'string', format: 'uuid' },
+            exam_type: { type: 'string', enum: ['midterm', 'final', 'project', 'homework'] },
+            score: { type: 'number' },
+            letter_grade: { type: 'string' },
+            graded_at: { type: 'string', format: 'date-time' },
+            created_by: { type: 'string', format: 'uuid' }
+          }
+        },
         400: { $ref: 'Error' },
         404: { $ref: 'Error' },
         500: { $ref: 'Error' }
@@ -28,52 +56,145 @@ export default async function (fastify: FastifyInstance) {
     }
   }, courseGradeController.createGrade);
 
-  // Get all grades for a student (all years and semesters)
-  fastify.get('/student/:studentId', {
+  // Get authenticated user's grades
+  fastify.get('/my', {
     schema: {
       tags: ['Grades'],
-      summary: 'Get all grades for a student',
-      description: 'Get all grades for a specific student, for all years and semesters. Each grade object includes a lecture field with code and title.',
-      params: {
-        type: 'object',
-        required: ['studentId'],
-        properties: {
-          studentId: { type: 'string' }
-        }
-      },
+      summary: 'Get authenticated user grades',
+      description: 'Get all grades for the authenticated user',
+      security: [{ bearerAuth: [] }],
       response: {
         200: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              _id: { type: 'string' },
-              studentId: { type: 'string' },
-              academicYear: { type: 'string' },
-              semester: { type: 'number' },
-              midtermGrade: { type: 'number' },
-              finalGrade: { type: 'number' },
-              projectGrade: { type: 'number' },
-              homeworkGrade: { type: 'number' },
-              attendanceGrade: { type: 'number' },
-              totalGrade: { type: 'number' },
-              status: { type: 'string' },
-              retakeCount: { type: 'number' },
-              lastUpdated: { type: 'string', format: 'date-time' },
-              createdAt: { type: 'string', format: 'date-time' },
-              updatedAt: { type: 'string', format: 'date-time' },
-              lecture: {
+          description: 'Successful response',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            data: {
+              type: 'array',
+              items: {
                 type: 'object',
                 properties: {
-                  code: { type: 'string' },
-                  title: { type: 'string' }
+                  id: { type: 'string', format: 'uuid' },
+                  studentId: { type: 'string', format: 'uuid' },
+                  courseId: { type: 'string', format: 'uuid' },
+                  examType: { type: 'string', enum: ['midterm', 'final', 'project', 'homework'] },
+                  score: { type: 'number' },
+                  letterGrade: { type: 'string' },
+                  gradedAt: { type: 'string', format: 'date-time' },
+                  createdBy: { type: 'string', format: 'uuid' },
+                  academicYear: { type: 'string' },
+                  semester: { type: 'number' },
+                  course: {
+                    type: 'object',
+                    properties: {
+                      code: { type: 'string' },
+                      title: { type: 'string' }
+                    }
+                  }
                 }
               }
             }
           }
         },
-        404: { $ref: 'Error' },
-        500: { $ref: 'Error' }
+        403: {
+          description: 'Access denied',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        },
+        404: {
+          description: 'No grades found',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        },
+        500: {
+          description: 'Internal server error',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        }
+      }
+    }
+  }, courseGradeController.getMyGrades);
+
+  // Get all grades for a student
+  fastify.get('/student/:studentId', {
+    schema: {
+      tags: ['Grades'],
+      summary: 'Get all grades for a student',
+      description: 'Get all grades for a specific student',
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        required: ['studentId'],
+        properties: {
+          studentId: { type: 'string', format: 'uuid' }
+        }
+      },
+      response: {
+        200: {
+          description: 'Successful response',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            data: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  studentId: { type: 'string', format: 'uuid' },
+                  courseId: { type: 'string', format: 'uuid' },
+                  examType: { type: 'string', enum: ['midterm', 'final', 'project', 'homework'] },
+                  score: { type: 'number' },
+                  letterGrade: { type: 'string' },
+                  gradedAt: { type: 'string', format: 'date-time' },
+                  createdBy: { type: 'string', format: 'uuid' },
+                  academicYear: { type: 'string' },
+                  semester: { type: 'number' },
+                  course: {
+                    type: 'object',
+                    properties: {
+                      code: { type: 'string' },
+                      title: { type: 'string' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        403: {
+          description: 'Access denied',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        },
+        404: {
+          description: 'No grades found',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        },
+        500: {
+          description: 'Internal server error',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        }
       }
     }
   }, courseGradeController.getAllStudentGrades);
@@ -83,12 +204,13 @@ export default async function (fastify: FastifyInstance) {
     schema: {
       tags: ['Grades'],
       summary: 'Get lecture grades',
-      description: 'Get all grades for a specific lecture. Each grade object includes a lecture field with code and title.',
+      description: 'Get all grades for a specific lecture',
+      security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
         required: ['lectureId'],
         properties: {
-          lectureId: { type: 'string' }
+          lectureId: { type: 'string', format: 'uuid' }
         }
       },
       querystring: {
@@ -100,37 +222,61 @@ export default async function (fastify: FastifyInstance) {
       },
       response: {
         200: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              _id: { type: 'string' },
-              studentId: { type: 'string' },
-              academicYear: { type: 'string' },
-              semester: { type: 'number' },
-              midtermGrade: { type: 'number' },
-              finalGrade: { type: 'number' },
-              projectGrade: { type: 'number' },
-              homeworkGrade: { type: 'number' },
-              attendanceGrade: { type: 'number' },
-              totalGrade: { type: 'number' },
-              status: { type: 'string' },
-              retakeCount: { type: 'number' },
-              lastUpdated: { type: 'string', format: 'date-time' },
-              createdAt: { type: 'string', format: 'date-time' },
-              updatedAt: { type: 'string', format: 'date-time' },
-              lecture: {
+          description: 'Successful response',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            data: {
+              type: 'array',
+              items: {
                 type: 'object',
                 properties: {
-                  code: { type: 'string' },
-                  title: { type: 'string' }
+                  id: { type: 'string', format: 'uuid' },
+                  studentId: { type: 'string', format: 'uuid' },
+                  courseId: { type: 'string', format: 'uuid' },
+                  examType: { type: 'string', enum: ['midterm', 'final', 'project', 'homework'] },
+                  score: { type: 'number' },
+                  letterGrade: { type: 'string' },
+                  gradedAt: { type: 'string', format: 'date-time' },
+                  createdBy: { type: 'string', format: 'uuid' },
+                  academicYear: { type: 'string' },
+                  semester: { type: 'number' },
+                  course: {
+                    type: 'object',
+                    properties: {
+                      code: { type: 'string' },
+                      title: { type: 'string' }
+                    }
+                  }
                 }
               }
             }
           }
         },
-        404: { $ref: 'Error' },
-        500: { $ref: 'Error' }
+        403: {
+          description: 'Access denied',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        },
+        404: {
+          description: 'No grades found',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        },
+        500: {
+          description: 'Internal server error',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        }
       }
     }
   }, courseGradeController.getLectureGrades);
@@ -141,11 +287,12 @@ export default async function (fastify: FastifyInstance) {
       tags: ['Grades'],
       summary: 'Get lecture statistics',
       description: 'Get grade statistics for a specific lecture',
+      security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
         required: ['lectureId'],
         properties: {
-          lectureId: { type: 'string' }
+          lectureId: { type: 'string', format: 'uuid' }
         }
       },
       querystring: {
@@ -156,40 +303,41 @@ export default async function (fastify: FastifyInstance) {
         }
       },
       response: {
-        200: { $ref: 'LectureStatistics' },
-        404: { $ref: 'Error' },
-        500: { $ref: 'Error' }
-      }
-    }
-  }, courseGradeController.getLectureStatistics);
-
-  // Request a grade review
-  fastify.post('/:id/review', {
-    schema: {
-      tags: ['Grades'],
-      summary: 'Request grade review',
-      description: 'Request a review for a specific grade',
-      params: {
-        type: 'object',
-        required: ['id'],
-        properties: {
-          id: { type: 'string' }
-        }
-      },
-      body: { $ref: 'GradeReview' },
-      response: {
         200: {
+          description: 'Successful response',
           type: 'object',
           properties: {
+            success: { type: 'boolean' },
+            data: { $ref: 'LectureStatistics' }
+          }
+        },
+        403: {
+          description: 'Access denied',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
             message: { type: 'string' }
           }
         },
-        400: { $ref: 'Error' },
-        404: { $ref: 'Error' },
-        500: { $ref: 'Error' }
+        404: {
+          description: 'No statistics found',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        },
+        500: {
+          description: 'Internal server error',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        }
       }
     }
-  }, courseGradeController.requestReview);
+  }, courseGradeController.getLectureStatistics);
 
   // Update a course grade
   fastify.put('/:id', {
@@ -197,19 +345,48 @@ export default async function (fastify: FastifyInstance) {
       tags: ['Grades'],
       summary: 'Update course grade',
       description: 'Update an existing course grade',
+      security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
         required: ['id'],
         properties: {
-          id: { type: 'string' }
+          id: { type: 'string', format: 'uuid' }
         }
       },
       body: { $ref: 'CourseGradeUpdate' },
       response: {
-        200: { $ref: 'CourseGrade' },
-        400: { $ref: 'Error' },
-        404: { $ref: 'Error' },
-        500: { $ref: 'Error' }
+        200: {
+          description: 'Successful response',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            data: { $ref: 'CourseGrade' }
+          }
+        },
+        403: {
+          description: 'Access denied',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        },
+        404: {
+          description: 'Grade not found',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        },
+        500: {
+          description: 'Internal server error',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        }
       }
     }
   }, courseGradeController.updateGrade);
@@ -220,17 +397,47 @@ export default async function (fastify: FastifyInstance) {
       tags: ['Grades'],
       summary: 'Get course grade',
       description: 'Get a specific course grade by ID',
+      security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
         required: ['id'],
         properties: {
-          id: { type: 'string' }
+          id: { type: 'string', format: 'uuid' }
         }
       },
       response: {
-        200: { $ref: 'CourseGrade' },
-        404: { $ref: 'Error' },
-        500: { $ref: 'Error' }
+        200: {
+          description: 'Successful response',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            data: { $ref: 'CourseGrade' }
+          }
+        },
+        403: {
+          description: 'Access denied',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        },
+        404: {
+          description: 'Grade not found',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        },
+        500: {
+          description: 'Internal server error',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        }
       }
     }
   }, courseGradeController.getGrade);
@@ -240,51 +447,48 @@ export default async function (fastify: FastifyInstance) {
     schema: {
       tags: ['Grades'],
       summary: 'Get structured student grades',
-      description: 'Returns academic year → semester → courses structure with GPA calculation. Each course object includes code, title, and credits.',
+      description: 'Returns academic year → semester → courses structure with GPA calculation',
+      security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
         required: ['studentId'],
         properties: {
-          studentId: { type: 'string' }
+          studentId: { type: 'string', format: 'uuid' }
         }
       },
       response: {
         200: {
+          description: 'Successful response',
           type: 'object',
           properties: {
-            academicYears: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  year: { type: 'string' },
-                  semesters: {
-                    type: 'array',
-                    items: {
-                      type: 'object',
-                      properties: {
-                        semester: { type: 'number' },
-                        courses: {
-                          type: 'array',
-                          items: {
-                            type: 'object',
-                            properties: {
-                              code: { type: 'string' },
-                              title: { type: 'string' },
-                              grade: { type: 'number' }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
+            success: { type: 'boolean' },
+            data: { $ref: 'StructuredGrades' }
           }
         },
-        404: { $ref: 'Error' },
-        500: { $ref: 'Error' }
+        403: {
+          description: 'Access denied',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        },
+        404: {
+          description: 'No grades found',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        },
+        500: {
+          description: 'Internal server error',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        }
       }
     }
   }, courseGradeController.getStructuredGrades);

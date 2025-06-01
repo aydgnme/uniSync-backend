@@ -1,33 +1,59 @@
 export const homeworkSchemas = {
-  Homework: {
+  Classroom: {
     type: 'object',
-    required: ['student', 'lecture', 'fileId', 'fileName'],
+    required: ['code', 'title', 'instructor'],
     properties: {
       _id: { type: 'string' },
-      student: { type: 'string' },
-      lecture: { type: 'string' },
+      code: { type: 'string' },
+      title: { type: 'string' },
+      instructor: { type: 'string' },
+      room: { type: 'string' },
+      time: { type: 'string' },
+      color: { type: 'string' },
+      banner: { type: 'string' },
+      description: { type: 'string' },
+      students: {
+        type: 'array',
+        items: { type: 'string' }
+      },
+      materials: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            title: { type: 'string' },
+            description: { type: 'string' },
       fileId: { type: 'string' },
       fileName: { type: 'string' },
-      submittedAt: { type: 'string', format: 'date-time' },
-      status: { type: 'string', enum: ['pending', 'graded'] },
-      grade: { type: 'number', minimum: 1, maximum: 10 },
-      feedback: { type: 'string' },
-      studentInfo: {
-        type: 'object',
-        properties: {
-          nrMatricol: { type: 'string' },
-          group: { type: 'string' },
-          subgroup: { type: 'string' },
-          name: { type: 'string' }
+            uploadedAt: { type: 'string', format: 'date-time' }
+          }
         }
       },
-      lectureInfo: {
+      assignments: {
+        type: 'array',
+        items: {
         type: 'object',
         properties: {
-          code: { type: 'string' },
           title: { type: 'string' },
-          type: { type: 'string' },
-          teacher: { type: 'string' }
+            description: { type: 'string' },
+            dueDate: { type: 'string', format: 'date-time' },
+            isUnlimited: { type: 'boolean' },
+            submissions: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  studentId: { type: 'string' },
+                  fileId: { type: 'string' },
+                  fileName: { type: 'string' },
+                  submittedAt: { type: 'string', format: 'date-time' },
+                  status: { type: 'string', enum: ['pending', 'submitted', 'graded'] },
+                  grade: { type: 'number', minimum: 0, maximum: 10 },
+                  feedback: { type: 'string' }
+                }
+              }
+            }
+          }
         }
       }
     }

@@ -1,29 +1,39 @@
-import { createHash } from 'crypto';
+import { supabase } from '../lib/supabase';
 import * as bcrypt from 'bcryptjs';
-import { PasswordReset } from '../models/PasswordReset.model';
-import { User } from '../models/user.model';
-import { generateCode } from '../utils/generateCode';
-import { UserService } from './user.service';
 
 export class PasswordResetService {
-  private static generateKey(cnp: string, matriculationNumber: string): string {
-    return createHash('sha256')
-      .update(`${cnp}:${matriculationNumber}`)
-      .digest('hex');
-  }
-
   static async createResetCode(cnp: string, matriculationNumber: string): Promise<string> {
-    const key = this.generateKey(cnp, matriculationNumber);
-    const code = generateCode();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    // Find student
+    const { data: student, error: studentError } = await supabase
+      .from('students')
+      .select('user_id')
+      .eq('cnp', cnp)
+      .eq('matriculation_number', matriculationNumber)
+      .single();
 
-    await PasswordReset.create({
-      key,
-      code,
-      expiresAt
-    });
+    if (studentError || !student) {
+      throw new Error('User not found');
+    }
 
-    return code;
+    // Generate reset code
+    const reset_code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expires_at = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes
+
+    // Create reset request
+    const { error: resetError } = await supabase
+      .from('password_reset_requests')
+      .insert({
+        cnp,
+        matriculation_number: matriculationNumber,
+        reset_code,
+        expires_at
+      });
+
+    if (resetError) {
+      throw new Error('Failed to generate reset code');
+    }
+
+    return reset_code;
   }
 
   static async validateResetCode(
@@ -31,11 +41,19 @@ export class PasswordResetService {
     matriculationNumber: string,
     code: string
   ): Promise<boolean> {
-    const key = this.generateKey(cnp, matriculationNumber);
-    const resetData = await PasswordReset.findOne({ key, code });
+    const { data: resetRequest, error } = await supabase
+      .from('password_reset_requests')
+      .select('*')
+      .eq('cnp', cnp)
+      .eq('matriculation_number', matriculationNumber)
+      .eq('reset_code', code)
+      .gt('expires_at', new Date().toISOString())
+      .is('used_at', null)
+      .single();
 
-    if (!resetData) return false;
-    if (resetData.expiresAt < new Date()) return false;
+    if (error || !resetRequest) {
+      return false;
+    }
 
     return true;
   }
@@ -47,24 +65,50 @@ export class PasswordResetService {
     newPassword: string
   ): Promise<boolean> {
     try {
-      const key = this.generateKey(cnp, matriculationNumber);
-      const resetData = await PasswordReset.findOne({ key, code });
-    
-      if (!resetData) return false;
-      if (resetData.expiresAt < new Date()) return false;
-    
-      // Update password using UserService
-      const updatedUser = await UserService.updatePasswordByCnpAndMatriculation(
-        cnp,
-        matriculationNumber,
-        newPassword
-      );
+      // Verify reset code
+      const { data: resetRequest, error: resetError } = await supabase
+        .from('password_reset_requests')
+        .select('*')
+        .eq('cnp', cnp)
+        .eq('matriculation_number', matriculationNumber)
+        .eq('reset_code', code)
+        .gt('expires_at', new Date().toISOString())
+        .is('used_at', null)
+        .single();
 
-      if (!updatedUser) return false;
-    
-      // Reset kodunu sil
-      await PasswordReset.deleteOne({ key });
-    
+      if (resetError || !resetRequest) {
+        throw new Error('Invalid or expired reset code');
+      }
+
+      // Get user ID
+      const { data: student } = await supabase
+        .from('students')
+        .select('user_id')
+        .eq('cnp', cnp)
+        .eq('matriculation_number', matriculationNumber)
+        .single();
+
+      if (!student) {
+        throw new Error('User not found');
+      }
+
+      // Update password
+      const password_hash = await bcrypt.hash(newPassword, 10);
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ password_hash })
+        .eq('id', student.user_id);
+
+      if (updateError) {
+        throw new Error('Failed to update password');
+      }
+
+      // Mark reset code as used
+      await supabase
+        .from('password_reset_requests')
+        .update({ used_at: new Date().toISOString() })
+        .eq('id', resetRequest.id);
+
       return true;
     } catch (error) {
       console.error('Error in resetPassword:', error);

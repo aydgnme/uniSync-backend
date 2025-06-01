@@ -1,7 +1,7 @@
 import 'fastify';
 import { FastifyRequest } from 'fastify';
 import { ApiKey } from '../models/api-key.model';
-import { User } from '../models/user.model';
+import '@fastify/jwt';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -9,11 +9,10 @@ declare module 'fastify' {
   }
 
   interface FastifyRequest {
-    user?: {
+    user: {
       userId: string;
       email: string;
-      role: string;
-      matriculationNumber: string;
+      role: 'student' | 'staff' | 'admin' | 'anon';
     };
     apiKey?: ApiKey;
   }
@@ -36,21 +35,14 @@ declare module 'pino-pretty' {
 declare module '@fastify/jwt' {
   interface FastifyJWT {
     payload: {
-      tokenType: string;
-      user: {
-        userId: string;
-        email: string;
-        role: string;
-        matriculationNumber: string;
-      };
-      iat?: number;
-      exp?: number;
+      userId: string;
+      email: string;
+      role: 'student' | 'staff' | 'admin';
     };
     user: {
       userId: string;
       email: string;
-      role: string;
-      matriculationNumber: string;
+      role: 'student' | 'staff' | 'admin';
     };
   }
 }

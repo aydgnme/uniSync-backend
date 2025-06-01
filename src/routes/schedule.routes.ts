@@ -1,68 +1,91 @@
 import { FastifyInstance } from "fastify";
-import { getSchedule } from "../controllers/schedule.controller";
+import { getMySchedule, getScheduleByGroup, getWeeklySchedule } from "../controllers/schedule.controller";
+import { authJWT } from "../middlewares/auth.jwt.middleware";
 
 export default async function scheduleRoutes(fastify: FastifyInstance) {
-  // Main schedule endpoint
-  fastify.get("/:facultyId/:specializationShortName/:studyYear/:groupName/:subgroupIndex?", {
+  // Add JWT authentication hook for all routes
+  fastify.addHook('onRequest', authJWT);
+
+  // Get my schedule
+  fastify.get("/my", {
     schema: {
       tags: ['Schedule'],
-      summary: 'Get schedule for a group',
-      description: `
-Get the schedule for a specific group in a faculty. Optionally specify a subgroup.
-
-**Examples:**
-- Get weekly schedule for main group: \`/api/schedule/1/C/1/3131?week=5\`
-- Get weekly schedule for subgroup: \`/api/schedule/1/C/1/3131/b?week=5\`
-- Get monthly schedule: \`/api/schedule/1/C/1/3131?month=3\`
-- Get today's schedule: \`/api/schedule/1/C/1/3131?today=true\`
-
-**Notes:**
-- \`subgroupIndex\` is optional
-- If no query parameters are provided, returns current week's schedule
-- \`week\` parameter accepts values between 1-14
-- \`month\` parameter accepts values between 1-12
-- \`today\` parameter is a boolean flag
-      `,
-      params: {
-        type: 'object',
-        required: ['facultyId', 'specializationShortName', 'studyYear', 'groupName'],
-        properties: {
-          facultyId: { 
-            type: 'string', 
-            description: 'Faculty identifier (e.g., "1")'
-          },
-          specializationShortName: { 
-            type: 'string', 
-            description: 'Specialization short name (e.g., "C")'
-          },
-          studyYear: {
-            type: 'string',
-            description: 'Study year (e.g., "1")'
-          },
-          groupName: { 
-            type: 'string', 
-            description: 'Group name (e.g., "3131")'
-          },
-          subgroupIndex: { 
-            type: 'string', 
-            description: 'Optional subgroup index (e.g., "b")'
+      summary: 'Get my schedule',
+      description: 'Get the schedule for the currently authenticated student',
+      security: [{ bearerAuth: [] }],
+      response: {
+        200: {
+          description: 'Successful response',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            data: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  scheduleId: { type: 'string', format: 'uuid' },
+                  courseId: { type: 'string', format: 'uuid' },
+                  courseCode: { type: 'string' },
+                  courseTitle: { type: 'string' },
+                  courseType: { type: 'string', enum: ['LECTURE', 'SEMINAR', 'LAB'] },
+                  teacherName: { type: 'string' },
+                  weekDay: { type: 'string', enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] },
+                  startTime: { type: 'string', format: 'time' },
+                  endTime: { type: 'string', format: 'time' },
+                  room: { type: 'string' },
+                  parity: { type: 'string', enum: ['ODD', 'EVEN', 'ALL'] },
+                  groupId: { type: 'string', format: 'uuid' },
+                  groupName: { type: 'string' },
+                  groupIndex: { type: 'string' },
+                  weeks: { 
+                    type: 'array',
+                    items: { type: 'number' }
+                  }
+                }
+              }
+            }
+          }
+        },
+        403: {
+          description: 'Access denied',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        },
+        500: {
+          description: 'Internal server error',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
           }
         }
-      },
+      }
+    }
+  }, getMySchedule);
+
+  // Get weekly schedule
+  fastify.get("/", {
+    schema: {
+      tags: ['Schedule'],
+      summary: 'Get weekly schedule',
+      description: 'Get schedules for past and future weeks',
+      security: [{ bearerAuth: [] }],
       querystring: {
         type: 'object',
         properties: {
-          week: { 
-            type: 'string', 
-            description: 'Optional week number (1-14)'
+          pastWeeks: {
+            type: 'number',
+            description: 'Number of past weeks to fetch',
+            default: 1
           },
-          month: { 
-            type: 'string', 
-            description: 'Optional month number (1-12)'
-          },
-          today: { 
-            type: 'boolean', 
-            description: 'Optional flag to get today\'s schedule'
+          futureWeeks: {
+            type: 'number',
+            description: 'Number of future weeks to fetch',
+            default: 1
           }
         }
       },
@@ -71,172 +94,58 @@ Get the schedule for a specific group in a faculty. Optionally specify a subgrou
           description: 'Successful response',
           type: 'object',
           properties: {
-            success: { 
-              type: 'boolean',
-              description: 'Operation success status'
-            },
-            facultyId: { 
-              type: 'string',
-              description: 'Faculty identifier'
-            },
-            groupName: { 
-              type: 'string',
-              description: 'Group name'
-            },
-            subgroupIndex: { 
-              type: 'string',
-              description: 'Subgroup index if applicable'
-            },
-            specializationShortName: { 
-              type: 'string',
-              description: 'Specialization short name'
-            },
-            studyYear: { 
-              type: 'number',
-              description: 'Study year'
-            },
-            isModular: { 
-              type: 'boolean',
-              description: 'Whether the schedule is modular'
-            },
+            success: { type: 'boolean' },
             data: {
               type: 'object',
               properties: {
-                day: { 
-                  type: 'number',
-                  description: 'Day of the week (1-7)'
-                },
-                dayName: { 
-                  type: 'string',
-                  description: 'Name of the day'
-                },
-                weekNumber: { 
-                  type: 'number',
-                  description: 'Week number (1-14)'
-                },
-                month: { 
-                  type: 'number',
-                  description: 'Month number (1-12)'
-                },
-                parity: { 
-                  type: 'string', 
-                  enum: ['ODD', 'EVEN', 'ALL'],
-                  description: 'Week parity'
-                },
-                courses: {
+                past: {
                   type: 'array',
-                  description: 'List of courses',
                   items: {
                     type: 'object',
                     properties: {
-                      id: { 
-                        type: 'string',
-                        description: 'Course ID'
-                      },
-                      code: { 
-                        type: 'string',
-                        description: 'Course code'
-                      },
-                      title: { 
-                        type: 'string',
-                        description: 'Course title'
-                      },
-                      type: { 
-                        type: 'string', 
-                        enum: ['LECTURE', 'LAB', 'SEMINAR'],
-                        description: 'Course type'
-                      },
-                      startTime: { 
-                        type: 'string',
-                        description: 'Course start time (HH:mm)'
-                      },
-                      endTime: { 
-                        type: 'string',
-                        description: 'Course end time (HH:mm)'
-                      },
-                      duration: { 
-                        type: 'number',
-                        description: 'Course duration in minutes'
-                      },
-                      room: { 
-                        type: 'string',
-                        description: 'Room number'
-                      },
-                      teacher: { 
-                        type: 'string',
-                        description: 'Teacher name'
-                      },
-                      weekDay: { 
-                        type: 'number',
-                        description: 'Day of the week (1-7)'
+                      scheduleId: { type: 'string', format: 'uuid' },
+                      courseId: { type: 'string', format: 'uuid' },
+                      courseCode: { type: 'string' },
+                      courseTitle: { type: 'string' },
+                      courseType: { type: 'string', enum: ['LECTURE', 'SEMINAR', 'LAB'] },
+                      teacherName: { type: 'string' },
+                      weekDay: { type: 'string', enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] },
+                      startTime: { type: 'string', format: 'time' },
+                      endTime: { type: 'string', format: 'time' },
+                      room: { type: 'string' },
+                      parity: { type: 'string', enum: ['ODD', 'EVEN', 'ALL'] },
+                      groupId: { type: 'string', format: 'uuid' },
+                      groupName: { type: 'string' },
+                      groupIndex: { type: 'string' },
+                      weeks: { 
+                        type: 'array',
+                        items: { type: 'number' }
                       }
                     }
                   }
                 },
-                schedule: {
+                future: {
                   type: 'array',
-                  description: 'Weekly schedules for monthly view',
                   items: {
                     type: 'object',
                     properties: {
-                      weekNumber: { 
-                        type: 'number',
-                        description: 'Week number (1-14)'
-                      },
-                      parity: { 
-                        type: 'string', 
-                        enum: ['ODD', 'EVEN', 'ALL'],
-                        description: 'Week parity'
-                      },
-                      courses: {
+                      scheduleId: { type: 'string', format: 'uuid' },
+                      courseId: { type: 'string', format: 'uuid' },
+                      courseCode: { type: 'string' },
+                      courseTitle: { type: 'string' },
+                      courseType: { type: 'string', enum: ['LECTURE', 'SEMINAR', 'LAB'] },
+                      teacherName: { type: 'string' },
+                      weekDay: { type: 'string', enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] },
+                      startTime: { type: 'string', format: 'time' },
+                      endTime: { type: 'string', format: 'time' },
+                      room: { type: 'string' },
+                      parity: { type: 'string', enum: ['ODD', 'EVEN', 'ALL'] },
+                      groupId: { type: 'string', format: 'uuid' },
+                      groupName: { type: 'string' },
+                      groupIndex: { type: 'string' },
+                      weeks: { 
                         type: 'array',
-                        description: 'List of courses for the week',
-                        items: {
-                          type: 'object',
-                          properties: {
-                            id: { 
-                              type: 'string',
-                              description: 'Course ID'
-                            },
-                            code: { 
-                              type: 'string',
-                              description: 'Course code'
-                            },
-                            title: { 
-                              type: 'string',
-                              description: 'Course title'
-                            },
-                            type: { 
-                              type: 'string', 
-                              enum: ['LECTURE', 'LAB', 'SEMINAR'],
-                              description: 'Course type'
-                            },
-                            startTime: { 
-                              type: 'string',
-                              description: 'Course start time (HH:mm)'
-                            },
-                            endTime: { 
-                              type: 'string',
-                              description: 'Course end time (HH:mm)'
-                            },
-                            duration: { 
-                              type: 'number',
-                              description: 'Course duration in minutes'
-                            },
-                            room: { 
-                              type: 'string',
-                              description: 'Room number'
-                            },
-                            teacher: { 
-                              type: 'string',
-                              description: 'Teacher name'
-                            },
-                            weekDay: { 
-                              type: 'number',
-                              description: 'Day of the week (1-7)'
-                            }
-                          }
-                        }
+                        items: { type: 'number' }
                       }
                     }
                   }
@@ -245,36 +154,114 @@ Get the schedule for a specific group in a faculty. Optionally specify a subgrou
             }
           }
         },
-        404: {
-          description: 'Group or subgroup not found',
+        403: {
+          description: 'Access denied',
           type: 'object',
           properties: {
-            success: { 
-              type: 'boolean',
-              description: 'Operation success status'
-            },
-            message: { 
-              type: 'string',
-              description: 'Error message'
-            }
+            success: { type: 'boolean' },
+            message: { type: 'string' }
           }
         },
         500: {
           description: 'Internal server error',
           type: 'object',
           properties: {
-            success: { 
-              type: 'boolean',
-              description: 'Operation success status'
-            },
-            message: { 
-              type: 'string',
-              description: 'Error message'
-            }
+            success: { type: 'boolean' },
+            message: { type: 'string' }
           }
         }
       }
     }
-  }, getSchedule);
-  
+  }, getWeeklySchedule);
+
+  // Get schedule by group ID
+  fastify.get("/group", {
+    schema: {
+      tags: ['Schedule'],
+      summary: 'Get my group schedule',
+      description: 'Get schedule for the authenticated student\'s group',
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        properties: {
+          week: {
+            type: 'number',
+            description: 'Week number'
+          },
+          month: {
+            type: 'number',
+            description: 'Month number'
+          },
+          today: {
+            type: 'boolean',
+            description: 'Get today\'s schedule'
+          },
+          parity: {
+            type: 'string',
+            enum: ['ODD', 'EVEN', 'ALL'],
+            description: 'Week parity'
+          }
+        }
+      },
+      response: {
+        200: {
+          description: 'Successful response',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            data: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  scheduleId: { type: 'string', format: 'uuid' },
+                  courseId: { type: 'string', format: 'uuid' },
+                  courseCode: { type: 'string' },
+                  courseTitle: { type: 'string' },
+                  courseType: { type: 'string', enum: ['LECTURE', 'SEMINAR', 'LAB'] },
+                  teacherName: { type: 'string' },
+                  weekDay: { type: 'string', enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] },
+                  startTime: { type: 'string', format: 'time' },
+                  endTime: { type: 'string', format: 'time' },
+                  room: { type: 'string' },
+                  parity: { type: 'string', enum: ['ODD', 'EVEN', 'ALL'] },
+                  groupId: { type: 'string', format: 'uuid' },
+                  groupName: { type: 'string' },
+                  groupIndex: { type: 'string' },
+                  weeks: { 
+                    type: 'array',
+                    items: { type: 'number' }
+                  }
+                }
+              }
+            }
+          }
+        },
+        403: {
+          description: 'Access denied',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        },
+        404: {
+          description: 'Schedule not found',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        },
+        500: {
+          description: 'Internal server error',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        }
+      }
+    }
+  }, getScheduleByGroup);
 }

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+// Password rules: min 8 characters, at least 1 uppercase letter and 1 special character
 const passwordRegex = /^(?=.*[A-Z])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{8,}$/;
 
 const passwordValidation = z
@@ -9,92 +10,93 @@ const passwordValidation = z
       'Password must be at least 8 characters long, contain at least one uppercase letter and one special character.'
   });
 
+// Academic info sub-schema
 const academicInfoSchema = z.object({
-  program: z.string(),
-  semester: z.number(),
-  studyYear: z.number().default(1),
-  groupName: z.string(),
-  subgroupIndex: z.string().default(''),
-  studentId: z.string(),
+  faculty_id: z.string().uuid(),
+  specialization_id: z.string().uuid(),
+  study_year: z.number().min(1).max(4),
+  semester: z.number().min(1).max(2),
+  group_name: z.string(),
+  subgroup: z.union([z.enum(['A', 'B', 'C']), z.literal('')]).optional(),
   advisor: z.string(),
-  gpa: z.number(),
-  specializationShortName: z.string(),
-  facultyId: z.string(),
-  groupId: z.string().optional(),
-  isModular: z.boolean().default(false)
+  gpa: z.number().min(0).max(10).optional(),
+  is_modular: z.boolean().default(false)
 });
 
-// Zod schemas for validation
+// Register schema
 export const registerSchema = z.object({
-  email: z.string().email('Invalid email address'),
-  password: passwordValidation,
-  confirmPassword: passwordValidation,
-  cnp: z.string().length(13, 'CNP must be 13 digits'),
-  matriculationNumber: z.string().min(5, 'Matriculation number is required'),
-  name: z.string().min(1, 'Name is required'),
-  phone: z.string(),
-  address: z.string(),
-  academicInfo: academicInfoSchema
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ['confirmPassword']
+  first_name: z.string().min(2, 'First name must be at least 2 characters'),
+  last_name: z.string().min(2, 'Last name must be at least 2 characters'),
+  email: z.string().email('Invalid email format'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  role: z.enum(['student', 'staff', 'admin'], {
+    errorMap: () => ({ message: 'Role must be one of: student, staff, admin' })
+  }),
+  phone_number: z.string()
+    .regex(/^\+[0-9]{10,15}$/, 'Phone number must start with + and contain 10-15 digits')
+    .optional(),
+  gender: z.enum(['male', 'female', 'other'], {
+    errorMap: () => ({ message: 'Gender must be one of: male, female, other' })
+  }).optional(),
+  date_of_birth: z.string()
+    .regex(/^\d{2}\.\d{2}\.\d{4}$/, 'Date of birth must be in DD.MM.YYYY format')
+    .optional(),
+  nationality: z.string().optional(),
+  cnp: z.string()
+    .regex(/^[0-9]{13}$/, 'CNP must be exactly 13 digits')
+    .optional(),
+  matriculation_number: z.string().optional(),
+  academicInfo: z.object({
+    faculty_id: z.string().uuid().optional().nullable(),
+    group_name: z.string().optional().nullable(),
+    is_modular: z.boolean().optional().default(false),
+    gpa: z.number().optional().nullable()
+  }).optional()
 });
 
+// Login schema
 export const loginSchema = z.object({
-  email: z.string().email('Invalid email address'),
-  password: z.string().min(1, 'Password is required')
+  email: z.string().email('Invalid email format'),
+  password: z.string().min(8, 'Password must be at least 8 characters')
 });
 
+// Reset code generation schema
 export const generateResetCodeSchema = z.object({
-  cnp: z.string().length(13, 'CNP must be 13 digits'),
-  matriculationNumber: z.string().min(5, 'Matriculation number is required')
+  cnp: z.string().regex(/^[0-9]{13}$/, 'CNP must be exactly 13 digits'),
+  matriculationNumber: z.string().min(1, 'Matriculation number is required')
 });
 
+// Reset code verification
+export const verifyResetCodeSchema = z.object({
+  cnp: z.string().regex(/^[0-9]{13}$/, 'CNP must be exactly 13 digits'),
+  matriculationNumber: z.string().min(1, 'Matriculation number is required'),
+  reset_code: z.string().length(6, 'Reset code must be 6 characters')
+});
+
+// Password reset schema
 export const resetPasswordSchema = z.object({
-  email: z.string().email('Invalid email address'),
-  resetCode: z.string(),
-  newPassword: passwordValidation,
-  confirmPassword: passwordValidation
+  cnp: z.string().regex(/^[0-9]{13}$/, 'CNP must be 13 digits'),
+  matriculationNumber: z.string().min(1, 'Matriculation number is required'),
+  code: z.string().regex(/^[0-9]{6}$/, 'Reset code must be 6 digits'),
+  newPassword: z.string().min(6, 'Password must be at least 6 characters'),
+  confirmPassword: z.string().min(6, 'Password must be at least 6 characters')
 }).refine((data) => data.newPassword === data.confirmPassword, {
   message: "Passwords don't match",
-  path: ['confirmPassword']
+  path: ["confirmPassword"]
 });
 
-export const createUserSchema = z.object({
-  name: z.string(),
-  email: z.string().email(),
-  password: z.string().min(6),
-  cnp: z.string(),
-  matriculationNumber: z.string(),
-  role: z.enum(['Student', 'Teacher', 'Admin']),
-  phone: z.string(),
-  address: z.string(),
-  academicInfo: academicInfoSchema
-});
-
-export const updateUserSchema = z.object({
-  name: z.string().optional(),
-  email: z.string().email().optional(),
-  password: z.string().min(6).optional(),
-  cnp: z.string().optional(),
-  matriculationNumber: z.string().optional(),
-  role: z.enum(['Student', 'Teacher', 'Admin']).optional(),
-  phone: z.string().optional(),
-  address: z.string().optional(),
-  academicInfo: academicInfoSchema.optional()
-});
-
+// User check schema (e.g., for validation on frontend)
 export const checkUserSchema = z.object({
-  email: z.string().email('Invalid email format'),
-  matriculationNumber: z.string().min(1, 'Matriculation number is required')
+  email: z.string().email('Invalid email format')
 });
 
+// Find user by CNP & matriculation
 export const findUserSchema = z.object({
-  cnp: z.string().min(1, 'CNP is required'),
+  cnp: z.string().regex(/^[0-9]{13}$/, 'CNP must be exactly 13 digits'),
   matriculationNumber: z.string().min(1, 'Matriculation number is required')
 });
 
-// OpenAPI schemas for documentation
+// OpenAPI definitions
 export const authSchemas = {
   AuthResponse: {
     type: 'object',
@@ -104,51 +106,55 @@ export const authSchemas = {
       user: {
         type: 'object',
         properties: {
-          _id: { type: 'string' },
+          id: { type: 'string', format: 'uuid' },
           email: { type: 'string' },
-          name: { type: 'string' },
-          role: { type: 'string', enum: ['Student', 'Teacher', 'Admin'] }
+          first_name: { type: 'string' },
+          last_name: { type: 'string' },
+          role: { type: 'string', enum: ['student', 'staff', 'admin'] }
         }
       }
     }
   },
-  LoginRequest: {
-    type: 'object',
-    required: ['email', 'password'],
-    properties: {
-      email: { type: 'string', format: 'email' },
-      password: { type: 'string', minLength: 1 }
-    }
-  },
   RegisterRequest: {
     type: 'object',
-    required: ['email', 'password', 'confirmPassword', 'cnp', 'matriculationNumber', 'name'],
+    required: [
+      'email',
+      'password',
+      'first_name',
+      'last_name',
+      'cnp',
+      'matriculation_number',
+      'gender',
+      'date_of_birth',
+      'nationality',
+      'academicInfo'
+    ],
     properties: {
       email: { type: 'string', format: 'email' },
       password: { type: 'string', minLength: 8 },
-      confirmPassword: { type: 'string', minLength: 8 },
+      first_name: { type: 'string', minLength: 1 },
+      last_name: { type: 'string', minLength: 1 },
       cnp: { type: 'string', minLength: 13, maxLength: 13 },
-      matriculationNumber: { type: 'string', minLength: 5 },
-      name: { type: 'string', minLength: 1 },
-      phone: { type: 'string' },
-      address: { type: 'string' },
-      program: { type: 'string' },
-      semester: { type: 'number' },
-      groupName: { type: 'string' },
-      subgroupIndex: { type: 'string' },
-      advisor: { type: 'string' },
-      gpa: { type: 'number' },
-      specializationShortName: { type: 'string' }
-    }
-  },
-  ResetPasswordRequest: {
-    type: 'object',
-    required: ['email', 'resetCode', 'newPassword', 'confirmPassword'],
-    properties: {
-      email: { type: 'string', format: 'email' },
-      resetCode: { type: 'string' },
-      newPassword: { type: 'string', minLength: 8 },
-      confirmPassword: { type: 'string', minLength: 8 }
+      matriculation_number: { type: 'string', minLength: 5 },
+      phone_number: { type: 'string' },
+      gender: { type: 'string', enum: ['male', 'female', 'other'] },
+      date_of_birth: { type: 'string', description: 'Date in format dd.MM.yyyy' },
+      nationality: { type: 'string' },
+      academicInfo: {
+        type: 'object',
+        required: ['faculty_id', 'specialization_id', 'study_year', 'semester', 'group_name', 'advisor'],
+        properties: {
+          faculty_id: { type: 'string', format: 'uuid' },
+          specialization_id: { type: 'string', format: 'uuid' },
+          study_year: { type: 'number', minimum: 1, maximum: 4 },
+          semester: { type: 'number', minimum: 1, maximum: 2 },
+          group_name: { type: 'string' },
+          subgroup: { type: 'string', enum: ['A', 'B', 'C'], nullable: true },
+          advisor: { type: 'string' },
+          gpa: { type: 'number', minimum: 0, maximum: 10 },
+          is_modular: { type: 'boolean' }
+        }
+      }
     }
   }
 };

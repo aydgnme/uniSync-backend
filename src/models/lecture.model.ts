@@ -1,91 +1,41 @@
-import { Schema, model, Document } from 'mongoose';
-
-export interface ITeacherInfo {
-  id?: string;
-  lastName: string;
-  firstName: string;
-  position?: string;
-  phd?: string;
-  otherTitle?: string;
-}
+import mongoose, { Document, Schema } from 'mongoose';
 
 export interface ILectureDocument extends Document {
-  facultyId: string;
-  groupId: string;
-  groupName: string;
-  subgroupIndex?: string;
-  weeks: number[];
-  weekDay: number;
-  startTime: string;
-  endTime: string;
-  duration: number;
   code: string;
   title: string;
-  type: 'LECTURE' | 'LAB' | 'SEMINAR';
-  room: string;
-  teacher: string;
-  teacherInfo: ITeacherInfo;
-  parity: 'ODD' | 'EVEN' | 'ALL';
-  specializationShortName: string;
-  studyYear: number;
   credits: number;
-  evaluationType: 'EXAM' | 'COLLOQUIUM' | 'PROJECT';
-  evaluationWeight: {
-    midterm: number;
-    final: number;
-    project?: number;
-    homework?: number;
-    attendance?: number;
-  };
+  evaluationType: string;
+  type: 'LECTURE' | 'SEMINAR' | 'LAB';
+  weekDay: string;
+  startTime: string;
+  endTime: string;
+  room: string;
+  weeks: number[];
+  parity: 'ODD' | 'EVEN' | 'ALL';
 }
 
-const TeacherInfoSchema = new Schema({
-  id: { type: String },
-  lastName: { type: String, required: true },
-  firstName: { type: String, required: true },
-  position: { type: String },
-  phd: { type: String },
-  otherTitle: { type: String }
-}, { _id: false });
-
-const LectureSchema = new Schema({
-  facultyId: { type: String, required: true },
-  groupId: { type: String, required: true },
-  groupName: { type: String, required: true },
-  subgroupIndex: { type: String },
-  weeks: { type: [Number], required: true },
-  weekDay: { type: Number, required: true },
+const LectureSchema = new Schema<ILectureDocument>({
+  code: { type: String, required: true, unique: true },
+  title: { type: String, required: true },
+  credits: { type: Number, required: true },
+  evaluationType: { type: String, required: true },
+  type: { 
+    type: String, 
+    required: true,
+    enum: ['LECTURE', 'SEMINAR', 'LAB']
+  },
+  weekDay: { type: String, required: true },
   startTime: { type: String, required: true },
   endTime: { type: String, required: true },
-  duration: { type: Number, required: true },
-  code: { type: String, required: true },
-  title: { type: String, required: true },
-  type: { type: String, enum: ['LECTURE', 'LAB', 'SEMINAR'], required: true },
-  room: { type: String, required: false },
-  teacher: { type: String, required: true },
-  teacherInfo: { type: TeacherInfoSchema, required: true },
-  parity: { type: String, enum: ['ODD', 'EVEN', 'ALL'], required: true },
-  specializationShortName: { type: String, required: true },
-  studyYear: { type: Number, required: true },
-  credits: { type: Number, required: true, min: 1, max: 10 },
-  evaluationType: { 
+  room: { type: String, required: true },
+  weeks: [{ type: Number }],
+  parity: { 
     type: String, 
-    enum: ['EXAM', 'COLLOQUIUM', 'PROJECT'],
-    required: true 
-  },
-  evaluationWeight: {
-    midterm: { type: Number, required: true, min: 0, max: 1 },
-    final: { type: Number, required: true, min: 0, max: 1 },
-    project: { type: Number, min: 0, max: 1 },
-    homework: { type: Number, min: 0, max: 1 },
-    attendance: { type: Number, min: 0, max: 1 }
+    required: true,
+    enum: ['ODD', 'EVEN', 'ALL']
   }
+}, {
+  timestamps: true
 });
 
-// Create compound indexes for faster queries
-LectureSchema.index({ facultyId: 1, groupId: 1 });
-LectureSchema.index({ facultyId: 1, groupName: 1, subgroupIndex: 1 });
-LectureSchema.index({ facultyId: 1, groupName: 1, weeks: 1 });
-LectureSchema.index({ facultyId: 1, groupName: 1, weekDay: 1 });
-
-export const Lecture = model<ILectureDocument>('Lecture', LectureSchema);
+export const Lecture = mongoose.model<ILectureDocument>('Lecture', LectureSchema); 

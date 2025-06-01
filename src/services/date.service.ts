@@ -1,7 +1,7 @@
 export function getCurrentWeekDay(): number {
   const now = new Date();
   const day = now.getDay();
-  return day === 0 ? 7 : day; // Pazar 0 → 7 olsun
+  return day === 0 ? 7 : day; // Sunday 0 → 7
 }
 
 export function getWeekNumber(): number {

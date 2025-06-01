@@ -10,7 +10,7 @@ const MAX_REQUESTS = 1000; // Maximum requests per hour
 export const verifyApiKey = async (request: FastifyRequest, reply: FastifyReply) => {
   try {
     const apiKey = request.headers['x-api-key'];
-    if (!apiKey) {
+    if (!apiKey || Array.isArray(apiKey)) {
       throw new Error('API key is required');
     }
 
@@ -74,7 +74,7 @@ export async function authApiKey(
     const key = await ApiKey.findOne({ 
       key: apiKey,
       isActive: true,
-      expiresAt: { $gt: new Date() } // Not expired
+      expiresAt: new Date() // Not expired
     });
 
     if (!key) {
@@ -94,8 +94,8 @@ export async function authApiKey(
 
     // Increment usage count
     await ApiKey.updateOne(
-      { _id: key._id },
-      { $inc: { usageCount: 1 } }
+      { _id: key.id },
+      { usageCount: key.usageCount + 1 }
     );
 
     // API key bilgisini request'e ekle

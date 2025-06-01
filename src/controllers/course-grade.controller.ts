@@ -1,31 +1,97 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { CourseGrade, ICourseGradeDocument } from '../models/course-grade.model';
-import { Lecture } from '../models/lecture.model';
-import { User } from '../models/user.model';
 import { logger } from '../utils/logger';
+import { supabase } from '../lib/supabase';
+
+interface Grade {
+  id: string;
+  student_id: string;
+  course_id: string;
+  exam_type: 'midterm' | 'final' | 'project' | 'homework';
+  score: number;
+  letter_grade: string;
+  graded_at: string;
+  created_by: string;
+  last_updated: string;
+  lectures?: {
+    code: string;
+    title: string;
+    credits: number;
+    teacher_id: string;
+    teacher_name: string;
+  };
+  total_grade?: number;
+  status?: 'PASSED' | 'FAILED';
+  retake_count?: number;
+  academic_year?: string;
+  semester?: number;
+}
+
+export interface Course {
+  code: string;
+  title: string;
+  credits: number;
+  teacherId: string;
+  teacherName: string;
+}
 
 export class CourseGradeController {
-  async createGrade(req: FastifyRequest, reply: FastifyReply) {
+  async createGrade(req: FastifyRequest<{
+    Body: {
+      student_id: string;
+      course_id: string;
+      exam_type: 'midterm' | 'final' | 'project' | 'homework';
+      score: number;
+      letter_grade: string;
+      graded_at: string;
+      created_by: string;
+    }
+  }>, reply: FastifyReply) {
     try {
-      const { studentId, lectureId, academicYear, semester, ...grades } = req.body as any;
+      const gradeData = req.body;
 
-      const lecture = await Lecture.findById(lectureId);
-      if (!lecture) {
-        return reply.status(404).send({ error: 'Lecture not found' });
+      // Validate student exists
+      const { data: student, error: studentError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', gradeData.student_id)
+        .eq('role', 'student')
+        .single();
+
+      if (studentError || !student) {
+        return reply.status(404).send({ error: 'Student not found' });
       }
 
-      const totalGrade = this.calculateTotalGrade(grades, lecture.evaluationWeight);
+      // Validate course exists
+      const { data: course, error: courseError } = await supabase
+        .from('lectures')
+        .select('id')
+        .eq('id', gradeData.course_id)
+        .single();
 
-      const grade = await CourseGrade.create({
-        studentId,
-        lectureId,
-        academicYear,
-        semester,
-        ...grades,
-        totalGrade,
-        status: totalGrade >= 5 ? 'PASSED' : 'FAILED',
-        lastUpdated: new Date()
-      });
+      if (courseError || !course) {
+        return reply.status(404).send({ error: 'Course not found' });
+      }
+
+      // Create the grade
+      const { data: grade, error: gradeError } = await supabase
+        .from('grades')
+        .insert({
+          student_id: gradeData.student_id,
+          course_id: gradeData.course_id,
+          exam_type: gradeData.exam_type,
+          score: gradeData.score,
+          letter_grade: gradeData.letter_grade,
+          graded_at: gradeData.graded_at,
+          created_by: gradeData.created_by,
+          last_updated: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (gradeError) {
+        logger.error('Error creating grade:', gradeError);
+        return reply.status(500).send({ error: 'Internal server error' });
+      }
 
       return reply.status(201).send(grade);
     } catch (error) {
@@ -37,36 +103,31 @@ export class CourseGradeController {
   async getGrade(req: FastifyRequest, reply: FastifyReply) {
     try {
       const { id } = req.params as { id: string };
-      const grade = await CourseGrade.findById(id)
-        .populate('lectureId', 'code title')
-        .populate('studentId', 'fullName matriculationNumber');
 
-      if (!grade) {
+      const { data: grade, error: gradeError } = await supabase
+        .from('grades')
+        .select(`
+          *,
+          lectures:course_id (code, title),
+          students:student_id (full_name, matriculation_number)
+        `)
+        .eq('id', id)
+        .single();
+
+      if (gradeError || !grade) {
         return reply.status(404).send({ error: 'Grade not found' });
       }
 
-      const gradeObj = grade.toObject();
-      let lecture = undefined;
-      const lectureData = gradeObj.lectureId as any;
-      if (
-        lectureData &&
-        typeof lectureData === 'object' &&
-        'code' in lectureData &&
-        'title' in lectureData
-      ) {
-        lecture = {
-          code: lectureData.code,
-          title: lectureData.title
-        };
-      }
-
-      const response: any = {
-        ...gradeObj,
-        ...(lecture && { lecture })
+      const response = {
+        ...grade,
+        lecture: {
+          code: grade.lectures.code,
+          title: grade.lectures.title
+        }
       };
-      if (lecture && 'lectureId' in response) {
-        delete response.lectureId;
-      }
+
+      delete response.lectures;
+      delete response.students;
 
       return reply.send(response);
     } catch (error) {
@@ -78,31 +139,46 @@ export class CourseGradeController {
   async updateGrade(req: FastifyRequest, reply: FastifyReply) {
     try {
       const { id } = req.params as { id: string };
-      const updates = req.body as Partial<ICourseGradeDocument>;
+      const updates = req.body as Partial<Grade>;
 
-      const grade = await CourseGrade.findById(id);
-      if (!grade) {
+      const { data: grade, error: gradeError } = await supabase
+        .from('grades')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (gradeError || !grade) {
         return reply.status(404).send({ error: 'Grade not found' });
       }
 
-      const lecture = await Lecture.findById(grade.lectureId);
-      if (!lecture) {
+      const { data: lecture, error: lectureError } = await supabase
+        .from('lectures')
+        .select('evaluation_weight')
+        .eq('id', grade.course_id)
+        .single();
+
+      if (lectureError || !lecture) {
         return reply.status(404).send({ error: 'Lecture not found' });
       }
 
-      const newGrades = { ...grade.toObject(), ...updates };
-      const totalGrade = this.calculateTotalGrade(newGrades, lecture.evaluationWeight);
+      const totalGrade = this.calculateTotalGrade({ ...grade, ...updates }, lecture.evaluation_weight);
 
-      const updatedGrade = await CourseGrade.findByIdAndUpdate(
-        id,
-        {
+      const { data: updatedGrade, error: updateError } = await supabase
+        .from('grades')
+        .update({
           ...updates,
-          totalGrade,
+          total_grade: totalGrade,
           status: totalGrade >= 5 ? 'PASSED' : 'FAILED',
-          lastUpdated: new Date()
-        },
-        { new: true }
-      );
+          last_updated: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (updateError) {
+        logger.error('Error updating grade:', updateError);
+        return reply.status(500).send({ error: 'Internal server error' });
+      }
 
       return reply.send(updatedGrade);
     } catch (error) {
@@ -118,7 +194,7 @@ export class CourseGradeController {
 
       // Validate required parameters
       if (!academicYear || !semester) {
-        return reply.status(400).send({ 
+        return reply.status(400).send({
           error: 'Missing required parameters',
           message: 'academicYear and semester are required'
         });
@@ -126,7 +202,7 @@ export class CourseGradeController {
 
       // Validate academic year format
       if (!/^\d{4}-\d{4}$/.test(academicYear)) {
-        return reply.status(400).send({ 
+        return reply.status(400).send({
           error: 'Invalid academic year format',
           message: 'Academic year must be in YYYY-YYYY format'
         });
@@ -135,25 +211,37 @@ export class CourseGradeController {
       // Validate semester
       const semesterNum = parseInt(semester);
       if (isNaN(semesterNum) || semesterNum < 1 || semesterNum > 2) {
-        return reply.status(400).send({ 
+        return reply.status(400).send({
           error: 'Invalid semester',
           message: 'Semester must be 1 or 2'
         });
       }
 
-      const query = { 
-        studentId,
-        academicYear,
+      const query = {
+        student_id: studentId,
+        academic_year: academicYear,
         semester: semesterNum
       };
 
       // Populate lectureId with code and title
-      const grades = await CourseGrade.find(query)
-        .populate('lectureId', 'code title')
-        .sort({ academicYear: -1, semester: -1 });
+      const { data: grades, error: gradesError } = await supabase
+        .from('grades')
+        .select(`
+          *,
+          lectures:course_id (code, title)
+        `)
+        .match(query);
+
+      if (gradesError) {
+        logger.error('Error getting student grades:', gradesError);
+        return reply.status(500).send({
+          error: 'Internal server error',
+          message: 'An error occurred while fetching student grades'
+        });
+      }
 
       if (!grades || grades.length === 0) {
-        return reply.status(404).send({ 
+        return reply.status(404).send({
           error: 'No grades found',
           message: `No grades found for student ${studentId} in ${academicYear} semester ${semesterNum}`
         });
@@ -161,8 +249,8 @@ export class CourseGradeController {
 
       // Map grades to include lecture.code and lecture.title, remove lectureId
       const mappedGrades = grades.map((grade) => {
-        const gradeObj = grade.toObject ? grade.toObject() : grade;
-        const lectureData = gradeObj.lectureId as any;
+        const gradeObj = grade as Grade;
+        const lectureData = gradeObj.lectures as any;
         let lecture = undefined;
         if (
           lectureData &&
@@ -176,7 +264,7 @@ export class CourseGradeController {
           };
         }
         // Remove only lectureId, keep all other fields
-        const { lectureId, ...rest } = gradeObj;
+        const { course_id, ...rest } = gradeObj;
         return {
           ...rest,
           ...(lecture && { lecture })
@@ -186,7 +274,7 @@ export class CourseGradeController {
       return reply.send(mappedGrades);
     } catch (error) {
       logger.error('Error getting student grades:', error);
-      return reply.status(500).send({ 
+      return reply.status(500).send({
         error: 'Internal server error',
         message: 'An error occurred while fetching student grades'
       });
@@ -198,20 +286,33 @@ export class CourseGradeController {
       const { lectureId } = req.params as { lectureId: string };
       const { academicYear, semester } = req.query as { academicYear?: string; semester?: number };
 
-      const query: any = { lectureId };
-      if (academicYear) query.academicYear = academicYear;
+      const query: any = { course_id: lectureId };
+      if (academicYear) query.academic_year = academicYear;
       if (semester) query.semester = semester;
 
       // Populate studentId and lectureId
-      const grades = await CourseGrade.find(query)
-        .populate('studentId', 'fullName matriculationNumber')
-        .populate('lectureId', 'code title')
-        .sort({ totalGrade: -1 });
+      const { data: grades, error: gradesError } = await supabase
+        .from('grades')
+        .select(`
+          *,
+          students:student_id (full_name, matriculation_number)
+        `)
+        .match(query)
+        .order('total_grade', { ascending: false });
+
+      if (gradesError) {
+        logger.error('Error getting lecture grades:', gradesError);
+        return reply.status(500).send({ error: 'Internal server error' });
+      }
+
+      if (!grades || grades.length === 0) {
+        return reply.status(404).send({ error: 'No grades found' });
+      }
 
       // Map grades to include lecture.code and lecture.title, remove lectureId
       const mappedGrades = grades.map((grade) => {
-        const gradeObj = grade.toObject ? grade.toObject() : grade;
-        const lectureData = gradeObj.lectureId as any;
+        const gradeObj = grade as Grade;
+        const lectureData = gradeObj.lectures as any;
         let lecture = undefined;
         if (
           lectureData &&
@@ -225,7 +326,7 @@ export class CourseGradeController {
           };
         }
         // Remove only lectureId, keep all other fields
-        const { lectureId, ...rest } = gradeObj;
+        const { course_id, ...rest } = gradeObj;
         return {
           ...rest,
           ...(lecture && { lecture })
@@ -239,55 +340,36 @@ export class CourseGradeController {
     }
   }
 
-  async requestReview(req: FastifyRequest, reply: FastifyReply) {
-    try {
-      const { id } = req.params as { id: string };
-      const { reason } = req.body as { reason: string };
-
-      const grade = await CourseGrade.findById(id);
-      if (!grade) {
-        return reply.status(404).send({ error: 'Grade not found' });
-      }
-
-      if (grade.retakeCount >= 3) {
-        return reply.status(400).send({ error: 'Maximum review requests reached' });
-      }
-
-      grade.retakeCount += 1;
-      grade.lastUpdated = new Date();
-      await grade.save();
-
-      // TODO: Notification system for professors
-
-      return reply.send({ message: 'Review request submitted successfully' });
-    } catch (error) {
-      logger.error('Error requesting grade review:', error);
-      return reply.status(500).send({ error: 'Internal server error' });
-    }
-  }
-
   async getLectureStatistics(req: FastifyRequest, reply: FastifyReply) {
     try {
       const { lectureId } = req.params as { lectureId: string };
       const { academicYear, semester } = req.query as { academicYear?: string; semester?: number };
 
-      const query: any = { lectureId };
-      if (academicYear) query.academicYear = academicYear;
+      const query: any = { course_id: lectureId };
+      if (academicYear) query.academic_year = academicYear;
       if (semester) query.semester = semester;
 
-      const grades = await CourseGrade.find(query);
+      const { data: grades, error: gradesError } = await supabase
+        .from('grades')
+        .select('*')
+        .match(query);
+
+      if (gradesError) {
+        logger.error('Error getting lecture statistics:', gradesError);
+        return reply.status(500).send({ error: 'Internal server error' });
+      }
 
       const statistics = {
         totalStudents: grades.length,
         passedStudents: grades.filter(g => g.status === 'PASSED').length,
         failedStudents: grades.filter(g => g.status === 'FAILED').length,
         averageGrade: grades.length > 0 ?
-          Math.round((grades.reduce((acc, g) => acc + g.totalGrade, 0) / grades.length) * 100) / 100 : 0,
+          Math.round((grades.reduce((acc, g) => acc + g.total_grade, 0) / grades.length) * 100) / 100 : 0,
         gradeDistribution: {
-          '9-10': grades.filter(g => g.totalGrade >= 9).length,
-          '7-8': grades.filter(g => g.totalGrade >= 7 && g.totalGrade < 9).length,
-          '5-6': grades.filter(g => g.totalGrade >= 5 && g.totalGrade < 7).length,
-          '1-4': grades.filter(g => g.totalGrade < 5).length
+          '9-10': grades.filter(g => g.total_grade >= 9).length,
+          '7-8': grades.filter(g => g.total_grade >= 7 && g.total_grade < 9).length,
+          '5-6': grades.filter(g => g.total_grade >= 5 && g.total_grade < 7).length,
+          '1-4': grades.filter(g => g.total_grade < 5).length
         }
       };
 
@@ -302,23 +384,42 @@ export class CourseGradeController {
     try {
       const { studentId } = req.params as { studentId: string };
 
-      const student = await User.findById(studentId).lean();
-      if (!student || student.role !== 'Student') {
+      const { data: student, error: studentError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', studentId)
+        .eq('role', 'student')
+        .single();
+
+      if (studentError || !student) {
         return reply.status(404).send({ error: 'Student not found' });
       }
 
       // Populate lectureId with code, title, credits
-      const grades = await CourseGrade.find({ studentId })
-        .populate('lectureId', 'code title credits')
-        .lean();
+      const { data: grades, error: gradesError } = await supabase
+        .from('grades')
+        .select(`
+          *,
+          lectures:course_id (code, title, credits)
+        `)
+        .eq('student_id', studentId);
+
+      if (gradesError) {
+        logger.error('Error generating structured grades:', gradesError);
+        return reply.status(500).send({ error: 'Internal server error' });
+      }
+
+      if (!grades || grades.length === 0) {
+        return reply.status(404).send({ error: 'No grades found' });
+      }
 
       // Map: { [year]: { year, semesters: [{ semester, courses: [...] }] } }
       const yearsMap = new Map<string, { year: string, semesters: any[] }>();
 
       for (const grade of grades) {
-        const yearKey = grade.academicYear;
+        const yearKey = grade.academic_year;
         const semesterKey = grade.semester;
-        const lectureData = grade.lectureId as any;
+        const lectureData = grade.lectures as any;
         let lecture = undefined;
         if (
           lectureData &&
@@ -329,7 +430,7 @@ export class CourseGradeController {
           lecture = {
             code: lectureData.code,
             title: lectureData.title,
-            grade: grade.totalGrade
+            grade: grade.total_grade
           };
         }
         if (!yearsMap.has(yearKey)) {
@@ -344,7 +445,7 @@ export class CourseGradeController {
           semesterObj = { semester: semesterKey, courses: [] };
           yearObj.semesters.push(semesterObj);
         }
-        semesterObj.courses.push(lecture || { code: grade.lectureId, grade: grade.totalGrade });
+        semesterObj.courses.push(lecture || { code: grade.course_id, grade: grade.total_grade });
       }
 
       return reply.send({
@@ -361,10 +462,19 @@ export class CourseGradeController {
     try {
       const { studentId } = req.params as { studentId: string };
 
-      // Find all grades for the student, populate lecture info
-      const grades = await CourseGrade.find({ studentId })
-        .populate('lectureId', 'code title')
-        .sort({ academicYear: -1, semester: -1 });
+      const { data: grades, error: gradesError } = await supabase
+        .from('grades')
+        .select(`
+          *,
+          lectures:course_id (code, title, credits)
+        `)
+        .eq('student_id', studentId)
+        .order('graded_at', { ascending: false });
+
+      if (gradesError) {
+        logger.error('Error getting student grades:', gradesError);
+        return reply.status(500).send({ error: 'Internal server error' });
+      }
 
       if (!grades || grades.length === 0) {
         return reply.status(404).send({
@@ -375,8 +485,8 @@ export class CourseGradeController {
 
       // Map grades to include lecture.code and lecture.title, remove lectureId
       const mappedGrades = grades.map((grade) => {
-        const gradeObj = grade.toObject ? grade.toObject() : grade;
-        const lectureData = gradeObj.lectureId as any;
+        const gradeObj = grade as Grade;
+        const lectureData = gradeObj.lectures as any;
         let lecture = undefined;
         if (
           lectureData &&
@@ -389,7 +499,7 @@ export class CourseGradeController {
             title: lectureData.title
           };
         }
-        const { lectureId, ...rest } = gradeObj;
+        const { course_id, ...rest } = gradeObj;
         return {
           ...rest,
           ...(lecture && { lecture })
@@ -406,12 +516,103 @@ export class CourseGradeController {
     }
   }
 
+  async getMyGrades(req: FastifyRequest, reply: FastifyReply) {
+    try {
+      if (!req.user) {
+        return reply.status(401).send({
+          success: false,
+          message: 'Unauthorized'
+        });
+      }
+
+      const { data: grades, error: gradesError } = await supabase
+        .from('view_student_grades_with_course_info')
+        .select(`
+          id,
+          student_id,
+          course_id,
+          exam_type,
+          score,
+          letter_grade,
+          graded_at,
+          created_by,
+          academic_year,
+          semester,
+          credits,
+          title,
+          code,
+          teacher_id,
+          teacher_name
+        `)
+        .eq('student_id', req.user.userId)
+        .order('graded_at', { ascending: false });
+
+      if (gradesError) {
+        logger.error('Error getting user grades:', gradesError);
+        return reply.status(500).send({
+          success: false,
+          message: 'Failed to fetch grades from database.'
+        });
+      }
+
+      if (!grades || grades.length === 0) {
+        return reply.status(404).send({
+          success: false,
+          message: 'No grades found for the authenticated user.'
+        });
+      }
+
+      // Log the raw data to debug
+      logger.info('Raw grades data:', grades);
+
+      const formattedGrades = grades.map((grade: any) => {
+        // Log each grade object to debug
+        logger.info('Processing grade:', grade);
+        
+        return {
+          id: grade.id,
+          studentId: grade.student_id,
+          courseId: grade.course_id,
+          examType: grade.exam_type,
+          score: grade.score,
+          letterGrade: grade.letter_grade,
+          gradedAt: grade.graded_at,
+          createdBy: grade.created_by,
+          academicYear: grade.academic_year,
+          semester: isNaN(parseInt(grade.semester)) ? grade.semester : parseInt(grade.semester),
+          course: {
+            code: grade.code,
+            title: grade.title,
+            credits: grade.credits ?? 0,
+            teacherId: grade.teacher_id,
+            teacherName: grade.teacher_name || 'Not Assigned'
+          }
+        };
+      });
+
+      // Log the formatted data to debug
+      logger.info('Formatted grades:', formattedGrades);
+
+      return reply.send({
+        success: true,
+        data: formattedGrades
+      });
+
+    } catch (error) {
+      logger.error('Unhandled error in getMyGrades:', error);
+      return reply.status(500).send({
+        success: false,
+        message: 'Internal server error.'
+      });
+    }
+  }
+
   private calculateTotalGrade(grades: any, weights: any): number {
     let total = 0;
     let totalWeight = 0;
 
     for (const key of ['midterm', 'final', 'project', 'homework', 'attendance']) {
-      const gradeKey = `${key}Grade`;
+      const gradeKey = `${key}_grade`;
       if (grades[gradeKey] !== undefined && weights[key] !== undefined) {
         total += grades[gradeKey] * weights[key];
         totalWeight += weights[key];

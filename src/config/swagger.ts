@@ -36,6 +36,42 @@ export const swaggerOptions: FastifyDynamicSwaggerOptions = {
             statusCode: { type: 'number' }
           }
         },
+        Schedule: {
+          type: 'object',
+          properties: {
+            scheduleId: { type: 'string', format: 'uuid' },
+            courseId: { type: 'string', format: 'uuid' },
+            courseCode: { type: 'string' },
+            courseTitle: { type: 'string' },
+            courseType: { type: 'string', enum: ['LECTURE', 'SEMINAR', 'LAB'] },
+            teacherName: { type: 'string' },
+            weekDay: { type: 'string', enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] },
+            startTime: { type: 'string', format: 'time' },
+            endTime: { type: 'string', format: 'time' },
+            room: { type: 'string' },
+            parity: { type: 'string', enum: ['ODD', 'EVEN', 'ALL'] },
+            groupId: { type: 'string', format: 'uuid' },
+            groupName: { type: 'string' },
+            groupIndex: { type: 'string' },
+            weeks: { 
+              type: 'array',
+              items: { type: 'number' }
+            }
+          }
+        },
+        WeeklySchedule: {
+          type: 'object',
+          properties: {
+            past: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/Schedule' }
+            },
+            future: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/Schedule' }
+            }
+          }
+        },
         CourseGrade: {
           type: 'object',
           required: ['studentId', 'lectureId', 'academicYear', 'semester'],
@@ -166,10 +202,16 @@ export const swaggerOptions: FastifyDynamicSwaggerOptions = {
     tags: [
       { name: 'Auth', description: 'Authentication endpoints' },
       { name: 'Users', description: 'User management endpoints' },
+      { name: 'Schedule', description: 'Schedule management endpoints' },
       { name: 'Homework', description: 'Homework management endpoints' },
       { name: 'Grades', description: 'Course grade management endpoints' },
       { name: 'System', description: 'System management endpoints' },
       { name: 'Announcements', description: 'Announcement management endpoints' }
+    ],
+    security: [
+      {
+        bearerAuth: []
+      }
     ]
   }
 }; 

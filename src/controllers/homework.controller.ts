@@ -4,6 +4,7 @@ import { User } from '../models/user.model';
 import { Lecture } from '../models/lecture.model';
 import { GridFSService } from '../services/gridfs.service';
 import { Types } from 'mongoose';
+import { Classroom } from '../models/classroom.model';
 
 interface UploadHomeworkBody {
   file: {
@@ -45,6 +46,43 @@ interface SubmitHomeworkBody {
 }
 
 interface GradeHomeworkBody {
+  grade: number;
+  feedback?: string;
+}
+
+interface CreateClassroomBody {
+  code: string;
+  title: string;
+  instructor: string;
+  room?: string;
+  time?: string;
+  color?: string;
+  banner?: string;
+  description?: string;
+}
+
+interface AddMaterialBody {
+  title: string;
+  description?: string;
+  fileId: string;
+  fileName: string;
+}
+
+interface CreateAssignmentBody {
+  title: string;
+  description: string;
+  dueDate?: Date;
+  isUnlimited?: boolean;
+}
+
+interface SubmitAssignmentBody {
+  studentId: string;
+  fileId: string;
+  fileName: string;
+}
+
+interface GradeAssignmentBody {
+  studentId: string;
   grade: number;
   feedback?: string;
 }
@@ -455,6 +493,250 @@ export class HomeworkController {
       return reply.status(204).send();
     } catch (error: any) {
       console.error('Error deleting homework:', error);
+      return reply.status(500).send({ error: 'Internal server error' });
+    }
+  }
+
+  async getAllClassrooms(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      const classrooms = await Classroom.find()
+        .select('code title instructor room time color banner description');
+      return reply.send(classrooms);
+    } catch (error: any) {
+      console.error('Error fetching classrooms:', error);
+      return reply.status(500).send({ error: 'Internal server error' });
+    }
+  }
+
+  async getClassroomById(
+    request: FastifyRequest<{ Params: { id: string } }>,
+    reply: FastifyReply
+  ) {
+    try {
+      const classroom = await Classroom.findById(request.params.id)
+        .populate('students', 'name email')
+        .populate('materials')
+        .populate('assignments');
+
+      if (!classroom) {
+        return reply.status(404).send({ error: 'Classroom not found' });
+      }
+      return reply.send(classroom);
+    } catch (error: any) {
+      console.error('Error fetching classroom:', error);
+      return reply.status(500).send({ error: 'Internal server error' });
+    }
+  }
+
+  async createClassroom(
+    request: FastifyRequest<{ Body: CreateClassroomBody }>,
+    reply: FastifyReply
+  ) {
+    try {
+      const classroom = await Classroom.create({
+        ...request.body,
+        students: [],
+        materials: [],
+        assignments: []
+      });
+
+      return reply.code(201).send({
+        message: 'Classroom successfully created',
+        classroom
+      });
+    } catch (error: any) {
+      console.error('Classroom creation error:', error);
+      return reply.code(500).send({ message: 'An error occurred while creating the classroom' });
+    }
+  }
+
+  async addMaterial(
+    request: FastifyRequest<{ 
+      Params: { id: string },
+      Body: AddMaterialBody 
+    }>,
+    reply: FastifyReply
+  ) {
+    try {
+      const classroom = await Classroom.findById(request.params.id);
+      if (!classroom) {
+        return reply.status(404).send({ error: 'Classroom not found' });
+      }
+
+      classroom.materials.push({
+        ...request.body,
+        uploadedAt: new Date()
+      });
+
+      await classroom.save();
+      return reply.send(classroom);
+    } catch (error: any) {
+      console.error('Error adding material:', error);
+      return reply.status(500).send({ error: 'Internal server error' });
+    }
+  }
+
+  async createAssignment(
+    request: FastifyRequest<{ 
+      Params: { id: string },
+      Body: CreateAssignmentBody 
+    }>,
+    reply: FastifyReply
+  ) {
+    try {
+      const classroom = await Classroom.findById(request.params.id);
+      if (!classroom) {
+        return reply.status(404).send({ error: 'Classroom not found' });
+      }
+
+      classroom.assignments.push({
+        ...request.body,
+        submissions: []
+      });
+
+      await classroom.save();
+      return reply.send(classroom);
+    } catch (error: any) {
+      console.error('Error creating assignment:', error);
+      return reply.status(500).send({ error: 'Internal server error' });
+    }
+  }
+
+  async submitAssignment(
+    request: FastifyRequest<{ 
+      Params: { classroomId: string; assignmentId: string },
+      Body: SubmitAssignmentBody 
+    }>,
+    reply: FastifyReply
+  ) {
+    try {
+      const classroom = await Classroom.findById(request.params.classroomId);
+      if (!classroom) {
+        return reply.status(404).send({ error: 'Classroom not found' });
+      }
+
+      // Find assignment by _id instead of using .id (for plain arrays)
+      const assignment = classroom.assignments.find((a: any) => a._id?.toString() === request.params.assignmentId);
+      if (!assignment) {
+        return reply.status(404).send({ error: 'Assignment not found' });
+      }
+
+      // Check if student is enrolled
+      if (!classroom.students.includes(new Types.ObjectId(request.body.studentId))) {
+        return reply.status(400).send({ error: 'Student is not enrolled in this classroom' });
+      }
+
+      // Check if homework is past due date (if not unlimited)
+      if (!assignment.isUnlimited && assignment.dueDate && new Date() > assignment.dueDate) {
+        return reply.status(400).send({ error: 'Assignment is past due date' });
+      }
+
+      // Check if student already submitted
+      const existingSubmission = assignment.submissions.find((sub: any) => sub.studentId.toString() === request.body.studentId);
+
+      if (existingSubmission) {
+        existingSubmission.fileId = request.body.fileId;
+        existingSubmission.fileName = request.body.fileName;
+        existingSubmission.submittedAt = new Date();
+        existingSubmission.status = 'submitted';
+      } else {
+        assignment.submissions.push({
+          ...request.body,
+          submittedAt: new Date(),
+          status: 'submitted'
+        });
+      }
+
+      await classroom.save();
+      return reply.send(classroom);
+    } catch (error: any) {
+      console.error('Error submitting assignment:', error);
+      return reply.status(500).send({ error: 'Internal server error' });
+    }
+  }
+
+  async gradeAssignment(
+    request: FastifyRequest<{ 
+      Params: { classroomId: string; assignmentId: string },
+      Body: GradeAssignmentBody 
+    }>,
+    reply: FastifyReply
+  ) {
+    try {
+      const classroom = await Classroom.findById(request.params.classroomId);
+      if (!classroom) {
+        return reply.status(404).send({ error: 'Classroom not found' });
+      }
+
+      // Find assignment by _id instead of using .id (for plain arrays)
+      const assignment = classroom.assignments.find((a: any) => a._id?.toString() === request.params.assignmentId);
+      if (!assignment) {
+        return reply.status(404).send({ error: 'Assignment not found' });
+      }
+
+      // Find submission by studentId
+      const submission = assignment.submissions.find((sub: any) => sub.studentId.toString() === request.body.studentId);
+
+      if (!submission) {
+        return reply.status(404).send({ error: 'Submission not found' });
+      }
+
+      if (submission.status !== 'submitted') {
+        return reply.status(400).send({ error: 'Assignment must be submitted before grading' });
+      }
+
+      submission.grade = request.body.grade;
+      submission.feedback = request.body.feedback;
+      submission.status = 'graded';
+
+      await classroom.save();
+      return reply.send(classroom);
+    } catch (error: any) {
+      console.error('Error grading assignment:', error);
+      return reply.status(500).send({ error: 'Internal server error' });
+    }
+  }
+
+  async enrollStudent(
+    request: FastifyRequest<{ 
+      Params: { id: string },
+      Body: { studentId: string }
+    }>,
+    reply: FastifyReply
+  ) {
+    try {
+      console.log('Enrolling student:', request.body.studentId, 'in classroom:', request.params.id);
+      
+      const classroom = await Classroom.findById(request.params.id);
+      if (!classroom) {
+        console.log('Classroom not found:', request.params.id);
+        return reply.status(404).send({ error: 'Classroom not found' });
+      }
+
+      const student = await User.findById(request.body.studentId);
+      if (!student) {
+        console.log('Student not found:', request.body.studentId);
+        return reply.status(404).send({ error: 'Student not found' });
+      }
+
+      if (classroom.students.includes(new Types.ObjectId(request.body.studentId))) {
+        console.log('Student already enrolled:', request.body.studentId);
+        return reply.status(400).send({ error: 'Student is already enrolled' });
+      }
+
+      console.log('Adding student to classroom...');
+      classroom.students.push(new Types.ObjectId(request.body.studentId));
+      await classroom.save();
+      console.log('Student successfully enrolled');
+
+      return reply.send(classroom);
+    } catch (error: any) {
+      console.error('Error enrolling student:', error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
       return reply.status(500).send({ error: 'Internal server error' });
     }
   }

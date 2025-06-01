@@ -4,7 +4,7 @@
     "module": "commonjs",
     "lib": ["ES2020"],
     "outDir": "./dist",
-    "rootDir": ".",
+    "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -16,6 +16,6 @@
       "*": ["node_modules/*"]
     }
   },
-  "include": ["src/**/*", "scripts/fetchProfessors.ts"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
-}
+} 
