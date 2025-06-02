@@ -2,7 +2,6 @@ import { FastifyRequest, FastifyReply } from "fastify";
 import { supabase } from "../lib/supabase";
 import { User, Schedule, WeekDay } from "../types/database.types";
 
-const weekDayOrder: WeekDay[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 // Add weekDay mapping
 const weekDayToNumber: Record<WeekDay, number> = {
@@ -17,7 +16,7 @@ const weekDayToNumber: Record<WeekDay, number> = {
 
 export const getMySchedule = async (request: FastifyRequest, reply: FastifyReply) => {
   try {
-    // 1. Kullanıcı doğrulama
+    // 1. User authentication
     const user = request.user as User;
 
     if (!user || user.role.toLowerCase() !== 'student') {
@@ -27,7 +26,7 @@ export const getMySchedule = async (request: FastifyRequest, reply: FastifyReply
       });
     }
 
-    // 2. Öğrenciye ait group_id alınır
+    // 2. Get student's group_id
     const { data: student, error: studentError } = await supabase
       .from('students')
       .select('group_id')
@@ -41,7 +40,7 @@ export const getMySchedule = async (request: FastifyRequest, reply: FastifyReply
       });
     }
 
-    // 3. full_schedule_view üzerinden ders programı alınır
+    // 3. Get schedule from full_schedule_view
     const { data: scheduleData, error: scheduleError } = await supabase
       .from('full_schedule_view')
       .select(`
@@ -71,7 +70,7 @@ export const getMySchedule = async (request: FastifyRequest, reply: FastifyReply
       });
     }
 
-    // 4. Veriyi frontend için formatla (camelCase ile)
+    // 4. Format the data for frontend (camelCase)
     const formattedSchedule = (scheduleData ?? []).map((entry: any) => ({
       scheduleId: entry.schedule_id,
       courseId: entry.course_id,
@@ -79,7 +78,7 @@ export const getMySchedule = async (request: FastifyRequest, reply: FastifyReply
       courseTitle: entry.course_title,
       courseType: entry.course_type || 'LECTURE',
       teacherName: entry.teacher_name || 'N/A',
-      weekDay: entry.week_day,
+      weekDay: weekDayToNumber[entry.week_day as WeekDay],
       startTime: entry.start_time,
       endTime: entry.end_time,
       room: entry.room,
@@ -153,7 +152,7 @@ export const getAllSchedules = async (request: FastifyRequest, reply: FastifyRep
 
 export const getScheduleByGroup = async (request: FastifyRequest, reply: FastifyReply) => {
   try {
-    // 1. Kullanıcı doğrulama
+    // 1. User authentication
     const user = request.user as User;
 
     if (!user || user.role.toLowerCase() !== 'student') {
@@ -163,7 +162,7 @@ export const getScheduleByGroup = async (request: FastifyRequest, reply: Fastify
       });
     }
 
-    // 2. Öğrenciye ait group_id alınır
+    // 2. Get student's group_id
     const { data: student, error: studentError } = await supabase
       .from('students')
       .select('group_id')
@@ -378,7 +377,7 @@ export const getSchedule = async (request: FastifyRequest, reply: FastifyReply) 
 
 export const getWeeklySchedule = async (request: FastifyRequest, reply: FastifyReply) => {
   try {
-    // 1. Kullanıcı doğrulama
+    // 1. User authentication
     const user = request.user as User;
 
     if (!user || user.role.toLowerCase() !== 'student') {
@@ -388,13 +387,13 @@ export const getWeeklySchedule = async (request: FastifyRequest, reply: FastifyR
       });
     }
 
-    // 2. Query parametrelerini al
+    // 2. Get query parameters
     const { pastWeeks = 1, futureWeeks = 1 } = request.query as {
       pastWeeks?: number;
       futureWeeks?: number;
     };
 
-    // 3. Öğrenciye ait group_id alınır
+    // 3. Get student's group_id
     const { data: student, error: studentError } = await supabase
       .from('students')
       .select('group_id')
@@ -486,7 +485,7 @@ export const getWeeklySchedule = async (request: FastifyRequest, reply: FastifyR
       courseTitle: entry.course_title,
       courseType: entry.course_type || 'LECTURE',
       teacherName: entry.teacher_name || 'N/A',
-      weekDay: entry.week_day,
+      weekDay: weekDayToNumber[entry.week_day as WeekDay],
       startTime: entry.start_time,
       endTime: entry.end_time,
       room: entry.room,
