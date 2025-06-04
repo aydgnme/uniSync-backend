@@ -477,63 +477,87 @@ export class CourseGradeController {
   }
 
   // Get all grades for a student (all years and semesters)
-  async getAllStudentGrades(req: FastifyRequest, reply: FastifyReply) {
-    try {
-      const { studentId } = req.params as { studentId: string };
+ async getAllStudentGrades(req: FastifyRequest, reply: FastifyReply) {
+  try {
+    const { studentId } = req.params as { studentId: string };
 
-      const { data: grades, error: gradesError } = await supabase
-        .from('grades')
-        .select(`
-          *,
-          lectures:course_id (code, title, credits)
-        `)
-        .eq('student_id', studentId)
-        .order('graded_at', { ascending: false });
+    const { data, error } = await supabase
+      .from('view_student_course_grades')
+      .select('*')
+      .eq('student_id', studentId);
 
-      if (gradesError) {
-        logger.error('Error getting student grades:', gradesError);
-        return reply.status(500).send({ error: 'Internal server error' });
-      }
-
-      if (!grades || grades.length === 0) {
-        return reply.status(404).send({
-          error: 'No grades found',
-          message: `No grades found for student ${studentId}`
-        });
-      }
-
-      // Map grades to include lecture.code and lecture.title, remove lectureId
-      const mappedGrades = grades.map((grade) => {
-        const gradeObj = grade as Grade;
-        const lectureData = gradeObj.lectures as any;
-        let lecture = undefined;
-        if (
-          lectureData &&
-          typeof lectureData === 'object' &&
-          'code' in lectureData &&
-          'title' in lectureData
-        ) {
-          lecture = {
-            code: lectureData.code,
-            title: lectureData.title
-          };
-        }
-        const { course_id, ...rest } = gradeObj;
-        return {
-          ...rest,
-          ...(lecture && { lecture })
-        };
-      });
-
-      return reply.send(mappedGrades);
-    } catch (error) {
-      logger.error('Error getting all student grades:', error);
+    if (error) {
+      logger.error('Error getting student grades:', error);
       return reply.status(500).send({
-        error: 'Internal server error',
-        message: 'An error occurred while fetching all student grades'
+        success: false,
+        message: 'Internal server error'
       });
     }
+
+    if (!data || data.length === 0) {
+      return reply.status(404).send({
+        success: false,
+        message: `No grades found for student ${studentId}`
+      });
+    }
+
+    const grades = data.flatMap((item) => {
+      const {
+        student_id,
+        course_code,
+        course_title,
+        credits,
+        academic_year,
+        semester,
+        teacher_names,
+        midterm_score,
+        final_score,
+        project_score,
+        homework_score,
+        midterm_weight,
+        final_weight,
+        project_weight,
+        homework_weight
+      } = item;
+
+      const examTypes = [
+        { type: 'midterm', score: midterm_score, weight: midterm_weight },
+        { type: 'final', score: final_score, weight: final_weight },
+        { type: 'project', score: project_score, weight: project_weight },
+        { type: 'homework', score: homework_score, weight: homework_weight }
+      ];
+
+      return examTypes
+        .filter(e => e.score !== null)
+        .map(e => ({
+          studentId: student_id,
+          course: {
+            code: course_code,
+            title: course_title,
+            credits
+          },
+          academicYear: academic_year,
+          semester: Number(semester),
+          examType: e.type,
+          score: e.score,
+          weight: parseFloat(e.weight ?? '0'),
+          teacherNames: teacher_names
+        }));
+    });
+
+    return reply.send({
+      success: true,
+      data: grades
+    });
+
+  } catch (err) {
+    logger.error('Unhandled error in getAllStudentGrades:', err);
+    return reply.status(500).send({
+      success: false,
+      message: 'Unexpected server error'
+    });
   }
+}
 
   async getMyGrades(req: FastifyRequest, reply: FastifyReply) {
     try {
@@ -623,27 +647,13 @@ export class CourseGradeController {
         return reply.status(401).send({ success: false, message: 'Unauthorized' });
       }
 
-      logger.info('Fetching grades for user:', req.user.userId);
+      logger.info('Fetching summarized grades for user:', req.user.userId);
 
       const { data, error } = await supabase
         .from('view_student_course_grades')
         .select(`
-        student_id,
-        course_code,
-        course_title,
-        credits,
-        academic_year,
-        semester,
-        midterm_score,
-        final_score,
-        project_score,
-        homework_score,
-        midterm_weight,
-        final_weight,
-        project_weight,
-        homework_weight,
-        teacher_names
-      `)
+          *
+        `)
         .eq('student_id', req.user.userId)
         .order('academic_year', { ascending: false })
         .order('semester', { ascending: false });
@@ -653,35 +663,25 @@ export class CourseGradeController {
         return reply.status(500).send({ success: false, message: 'Database error' });
       }
 
-      logger.info('Raw data from database:', JSON.stringify(data, null, 2));
+      if (!data || data.length === 0) {
+        return reply.status(404).send({ 
+          success: false, 
+          message: 'No grades found for the authenticated user.' 
+        });
+      }
 
-      // Ensure we're sending the complete data
-      const responseData = data.map(item => ({
-        student_id: item.student_id,
-        course_code: item.course_code,
-        course_title: item.course_title,
-        credits: item.credits,
-        academic_year: item.academic_year,
-        semester: item.semester,
-        midterm_score: item.midterm_score,
-        final_score: item.final_score,
-        project_score: item.project_score,
-        homework_score: item.homework_score,
-        midterm_weight: item.midterm_weight,
-        final_weight: item.final_weight,
-        project_weight: item.project_weight,
-        homework_weight: item.homework_weight,
-        teacher_names: item.teacher_names
+      // Provide the entire query output without calculation
+      const processedData = data.map(course => ({
+        ...course
       }));
-
-      logger.info('Processed response data:', JSON.stringify(responseData, null, 2));
 
       return reply.send({
         success: true,
-        data: responseData,
+        data: processedData
       });
+
     } catch (err) {
-      logger.error('Unhandled error in getMyGrades:', err);
+      logger.error('Unhandled error in getSummarizedGrades:', err);
       return reply.status(500).send({ success: false, message: 'Internal server error' });
     }
   }

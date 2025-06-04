@@ -5,22 +5,25 @@ import { logger } from '../utils/logger';
 import bcrypt from 'bcrypt';
 
 interface Faculty {
+  id: string;
   name: string;
 }
 
 interface Specialization {
+  id: string;
   name: string;
   short_name: string;
 }
 
 interface Group {
+  id: string;
   name: string;
   subgroup: string;
   semester: number;
   study_year: number;
   specialization_id: string;
   is_modular: boolean;
-  specializations: Specialization[];
+  specializations: Specialization;
 }
 
 interface Student {
@@ -32,7 +35,7 @@ interface Student {
   group_id: string;
   faculty_id: string;
   groups: Group;
-  faculty?: Faculty;
+  faculty: Faculty;
 }
 
 interface User {
@@ -41,15 +44,38 @@ interface User {
   last_name: string;
   email: string;
   role: string;
-  phone_number: string;
-  gender: string;
-  date_of_birth: string;
-  nationality: string;
+  phone_number: string | null;
+  gender: string | null;
+  date_of_birth: string | null;
+  nationality: string | null;
   created_at: string;
-  updated_at: string;
-  last_login: string;
+  last_login: string | null;
   is_active: boolean;
-  students: Student | null;
+  students: {
+    cnp: string | null;
+    matriculation_number: string | null;
+    advisor: string | null;
+    is_modular: boolean;
+    gpa: number | null;
+    group_id: string | null;
+    faculty_id: string | null;
+    faculty: {
+      name: string;
+    } | null;
+    groups: {
+      id: string;
+      name: string;
+      subgroup: string;
+      semester: number;
+      study_year: number;
+      specialization_id: string;
+      is_modular: boolean;
+      specializations: {
+        name: string;
+        short_name: string;
+      } | null;
+    } | null;
+  } | null;
 }
 
 interface UpdateUserBody {
@@ -611,12 +637,15 @@ export const UserController = {
   async getProfile(request: FastifyRequest, reply: FastifyReply) {
     try {
       if (!request.user) {
+        logger.warn('No user found in request');
         return reply.code(401).send({
           success: false,
           message: 'Unauthorized'
         });
       }
-  
+
+      logger.info('Fetching profile for user:', { userId: request.user.userId });
+
       const { data: user, error } = await supabase
         .from('users')
         .select(`
@@ -629,6 +658,9 @@ export const UserController = {
           gender,
           date_of_birth,
           nationality,
+          created_at,
+          last_login,
+          is_active,
           students (
             cnp,
             matriculation_number,
@@ -637,7 +669,9 @@ export const UserController = {
             gpa,
             group_id,
             faculty_id,
-            faculty:faculties ( name ),
+            faculty:faculties (
+              name
+            ),
             groups (
               id,
               name,
@@ -655,7 +689,7 @@ export const UserController = {
         `)
         .eq('id', request.user.userId)
         .single();
-  
+
       if (error) {
         logger.error('Error fetching user profile:', error);
         return reply.code(500).send({
@@ -663,19 +697,37 @@ export const UserController = {
           message: 'Error fetching user profile'
         });
       }
-  
+
       if (!user) {
+        logger.warn('User not found:', { userId: request.user.userId });
         return reply.code(404).send({
           success: false,
           message: 'User not found'
         });
       }
-  
+
+      // Fetch advisor information separately
       const student = Array.isArray(user.students) ? user.students[0] : user.students;
-      const group = Array.isArray(student?.groups) ? student.groups[0] : student?.groups;
-      const facultyName = Array.isArray(student?.faculty) ? student.faculty[0]?.name : student?.faculty?.name;
-      const specialization = Array.isArray(group?.specializations) ? group.specializations[0] : group?.specializations;
-  
+      let advisorName = null;
+
+      if (student?.advisor) {
+        const { data: advisor, error: advisorError } = await supabase
+          .from('users')
+          .select('first_name, last_name')
+          .eq('id', student.advisor)
+          .single();
+
+        if (!advisorError && advisor) {
+          advisorName = `${advisor.first_name} ${advisor.last_name}`;
+        }
+      }
+
+      const group = student?.groups;
+      const facultyName = student?.faculty?.name;
+      const specialization = group?.specializations;
+
+      logger.info('Successfully fetched user profile:', { userId: user.id });
+
       const response = {
         success: true,
         data: {
@@ -683,34 +735,33 @@ export const UserController = {
           email: user.email,
           role: user.role,
           name: `${user.first_name} ${user.last_name}`,
-          phone: user.phone_number,
-          gender: user.gender,
-          dateOfBirth: user.date_of_birth,
-          nationality: user.nationality,
-          cnp: student?.cnp,
-          matriculationNumber: student?.matriculation_number,
+          phone: user.phone_number || '',
+          gender: user.gender || '',
+          dateOfBirth: user.date_of_birth || '',
+          nationality: user.nationality || '',
+          cnp: student?.cnp || '',
+          matriculationNumber: student?.matriculation_number || '',
           academicInfo: {
-            advisor: student?.advisor || null,
-            facultyId: student?.faculty_id,
-            facultyName: facultyName,
+            advisor: advisorName,
+            facultyId: student?.faculty_id || null,
+            facultyName: facultyName || null,
             gpa: student?.gpa || 0,
-            groupName: group?.name,
+            groupName: group?.name || null,
             isModular: group?.is_modular ?? student?.is_modular ?? false,
-            program: group?.name,
-            semester: group?.semester || 1,
-            specializationId: group?.specialization_id,
-            specializationShortName: specialization?.short_name,
+            program: group?.name || null,
+            semester: group?.semester || null,
+            specializationId: group?.specialization_id || null,
+            specializationShortName: specialization?.short_name || null,
             studentId: user.id,
-            studyYear: group?.study_year || 1,
-            subgroupIndex: group?.subgroup
+            studyYear: group?.study_year || null,
+            subgroupIndex: group?.subgroup || null
           }
         }
       };
-  
-      logger.info('Sending response:', JSON.stringify(response, null, 2));
+
       return reply.code(200).send(response);
-    } catch (error: unknown) {
-      logger.error('Error fetching user profile:', error);
+    } catch (error) {
+      logger.error('Error in getProfile:', error);
       return reply.code(500).send({
         success: false,
         message: 'Error fetching user profile'
@@ -821,6 +872,236 @@ export const UserController = {
         error: error instanceof Error ? error.message : 'Unknown error',
         code: 'INTERNAL_SERVER_ERROR',
         statusCode: 500
+      });
+    }
+  },
+
+  async getStudentsByFacultyId(
+    request: FastifyRequest<{ Params: { facultyId: string } }>,
+    reply: FastifyReply
+  ) {
+    try {
+      const { facultyId } = request.params;
+
+      if (!facultyId) {
+        return reply.code(400).send({
+          success: false,
+          message: 'Faculty ID is required'
+        });
+      }
+
+      const { data: students, error } = await supabase
+        .from('users')
+        .select(`
+          id,
+          first_name,
+          last_name,
+          email,
+          phone_number,
+          gender,
+          date_of_birth,
+          nationality,
+          created_at,
+          last_login,
+          is_active,
+          students (
+            cnp,
+            matriculation_number,
+            advisor,
+            is_modular,
+            gpa,
+            group_id,
+            faculty_id,
+            faculty:faculties (
+              name
+            ),
+            groups (
+              id,
+              name,
+              subgroup,
+              semester,
+              study_year,
+              specialization_id,
+              is_modular,
+              specializations (
+                name,
+                short_name
+              )
+            )
+          )
+        `)
+        .eq('role', 'student')
+        .eq('students.faculty_id', facultyId);
+
+      if (error) {
+        logger.error('Error fetching students:', error);
+        return reply.code(500).send({
+          success: false,
+          message: 'An error occurred while fetching students'
+        });
+      }
+
+      const formattedStudents = students.map(user => {
+        const student = Array.isArray(user.students) ? user.students[0] : user.students;
+        const group = student?.groups;
+        const facultyName = student?.faculty?.name;
+        const specialization = group?.specializations;
+
+        return {
+          id: user.id,
+          firstName: user.first_name,
+          lastName: user.last_name,
+          email: user.email,
+          phoneNumber: user.phone_number,
+          gender: user.gender,
+          dateOfBirth: user.date_of_birth,
+          nationality: user.nationality,
+          cnp: student?.cnp,
+          matriculationNumber: student?.matriculation_number,
+          isModular: group?.is_modular ?? student?.is_modular ?? false,
+          gpa: student?.gpa || 0,
+          groupId: group?.id,
+          facultyId: student?.faculty_id,
+          advisorName: student?.advisor,
+          isActive: user.is_active,
+          academicInfo: {
+            groupName: group?.name,
+            subgroupIndex: group?.subgroup,
+            semester: group?.semester,
+            studyYear: group?.study_year,
+            specializationId: group?.specialization_id,
+            specializationName: specialization?.name,
+            specializationShortName: specialization?.short_name,
+            facultyName: facultyName
+          }
+        };
+      });
+
+      return reply.code(200).send({
+        success: true,
+        data: formattedStudents
+      });
+
+    } catch (error) {
+      logger.error('Error fetching students:', error);
+      return reply.code(500).send({
+        success: false,
+        message: 'An error occurred while fetching students'
+      });
+    }
+  },
+
+  async getMyStudentInfo(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      if (!request.user) {
+        return reply.code(401).send({
+          success: false,
+          message: 'Unauthorized'
+        });
+      }
+
+      const { data: user, error } = await supabase
+        .from('users')
+        .select(`
+          id,
+          first_name,
+          last_name,
+          email,
+          phone_number,
+          gender,
+          date_of_birth,
+          nationality,
+          created_at,
+          last_login,
+          is_active,
+          students (
+            cnp,
+            matriculation_number,
+            advisor,
+            is_modular,
+            gpa,
+            group_id,
+            faculty_id,
+            faculty:faculties (
+              name
+            ),
+            groups (
+              id,
+              name,
+              subgroup,
+              semester,
+              study_year,
+              specialization_id,
+              is_modular,
+              specializations (
+                name,
+                short_name
+              )
+            )
+          )
+        `)
+        .eq('id', request.user.userId)
+        .single();
+
+      if (error) {
+        logger.error('Error fetching student info:', error);
+        return reply.code(500).send({
+          success: false,
+          message: 'An error occurred while fetching student information'
+        });
+      }
+
+      if (!user) {
+        return reply.code(404).send({
+          success: false,
+          message: 'User not found'
+        });
+      }
+
+      const student = Array.isArray(user.students) ? user.students[0] : user.students;
+      const group = student?.groups;
+      const facultyName = student?.faculty?.name;
+      const specialization = group?.specializations;
+
+      const response = {
+        success: true,
+        data: {
+          id: user.id,
+          firstName: user.first_name,
+          lastName: user.last_name,
+          email: user.email,
+          phoneNumber: user.phone_number,
+          gender: user.gender,
+          dateOfBirth: user.date_of_birth,
+          nationality: user.nationality,
+          cnp: student?.cnp,
+          matriculationNumber: student?.matriculation_number,
+          isModular: group?.is_modular ?? student?.is_modular ?? false,
+          gpa: student?.gpa || 0,
+          groupId: group?.id,
+          facultyId: student?.faculty_id,
+          advisorName: student?.advisor,
+          isActive: user.is_active,
+          academicInfo: {
+            groupName: group?.name,
+            subgroupIndex: group?.subgroup,
+            semester: group?.semester,
+            studyYear: group?.study_year,
+            specializationId: group?.specialization_id,
+            specializationName: specialization?.name,
+            specializationShortName: specialization?.short_name,
+            facultyName: facultyName
+          }
+        }
+      };
+
+      return reply.code(200).send(response);
+
+    } catch (error) {
+      logger.error('Error fetching student info:', error);
+      return reply.code(500).send({
+        success: false,
+        message: 'An error occurred while fetching student information'
       });
     }
   }

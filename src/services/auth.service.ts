@@ -250,5 +250,65 @@ export const AuthService = {
       .eq('id', resetRequest.id);
 
     return true;
+  },
+
+  async createSession(userId: string, ipAddress: string, deviceInfo: string) {
+    const { data: session, error } = await supabase
+      .from('user_sessions')
+      .insert({
+        user_id: userId,
+        ip_address: ipAddress,
+        device_info: deviceInfo
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error('Failed to create session');
+    }
+
+    return session;
+  },
+
+  async endSession(sessionId: string) {
+    const { error } = await supabase
+      .from('user_sessions')
+      .update({ logout_time: new Date().toISOString() })
+      .eq('id', sessionId);
+
+    if (error) {
+      throw new Error('Failed to end session');
+    }
+
+    return true;
+  },
+
+  async getUserSessions(userId: string) {
+    const { data: sessions, error } = await supabase
+      .from('user_sessions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('login_time', { ascending: false });
+
+    if (error) {
+      throw new Error('Failed to get user sessions');
+    }
+
+    return sessions;
+  },
+
+  async getActiveSessions(userId: string) {
+    const { data: sessions, error } = await supabase
+      .from('user_sessions')
+      .select('*')
+      .eq('user_id', userId)
+      .is('logout_time', null)
+      .order('login_time', { ascending: false });
+
+    if (error) {
+      throw new Error('Failed to get active sessions');
+    }
+
+    return sessions;
   }
 };

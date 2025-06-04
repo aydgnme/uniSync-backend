@@ -391,4 +391,153 @@ export default async function userRoutes(fastify: FastifyInstance) {
       }
     }
   }, UserController.updateUserRole);
+
+  // Get students by faculty ID
+  fastify.get('/faculty/:facultyId/students', {
+    schema: {
+      tags: ['Users'],
+      summary: 'Get all students by faculty ID',
+      description: 'Get all students belonging to a specific faculty',
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        required: ['facultyId'],
+        properties: {
+          facultyId: { type: 'string', format: 'uuid' }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            data: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  firstName: { type: 'string' },
+                  lastName: { type: 'string' },
+                  email: { type: 'string', format: 'email' },
+                  phoneNumber: { type: 'string' },
+                  gender: { type: 'string', enum: ['male', 'female', 'other'] },
+                  dateOfBirth: { type: 'string', format: 'date' },
+                  nationality: { type: 'string' },
+                  cnp: { type: 'string' },
+                  matriculationNumber: { type: 'string' },
+                  isModular: { type: 'boolean' },
+                  gpa: { type: 'number' },
+                  groupId: { type: 'string', format: 'uuid' },
+                  facultyId: { type: 'string', format: 'uuid' },
+                  advisorName: { type: 'string' },
+                  isActive: { type: 'boolean' },
+                  academicInfo: {
+                    type: 'object',
+                    properties: {
+                      groupName: { type: 'string' },
+                      subgroupIndex: { type: 'string' },
+                      semester: { type: 'number' },
+                      studyYear: { type: 'number' },
+                      specializationId: { type: 'string', format: 'uuid' },
+                      specializationName: { type: 'string' },
+                      specializationShortName: { type: 'string' },
+                      facultyName: { type: 'string' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        }
+      }
+    }
+  }, UserController.getStudentsByFacultyId);
+
+  // Get my student information
+  fastify.get('/my/student', {
+    schema: {
+      tags: ['Users'],
+      summary: 'Get authenticated student information',
+      description: 'Get detailed information about the authenticated student',
+      security: [{ bearerAuth: [] }],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', format: 'uuid' },
+                firstName: { type: 'string' },
+                lastName: { type: 'string' },
+                email: { type: 'string', format: 'email' },
+                phoneNumber: { type: 'string' },
+                gender: { type: 'string', enum: ['male', 'female', 'other'] },
+                dateOfBirth: { type: 'string', format: 'date' },
+                nationality: { type: 'string' },
+                cnp: { type: 'string' },
+                matriculationNumber: { type: 'string' },
+                isModular: { type: 'boolean' },
+                gpa: { type: 'number' },
+                groupId: { type: 'string', format: 'uuid' },
+                facultyId: { type: 'string', format: 'uuid' },
+                advisorName: { type: 'string' },
+                isActive: { type: 'boolean' },
+                academicInfo: {
+                  type: 'object',
+                  properties: {
+                    groupName: { type: 'string' },
+                    subgroupIndex: { type: 'string' },
+                    semester: { type: 'number' },
+                    studyYear: { type: 'number' },
+                    specializationId: { type: 'string', format: 'uuid' },
+                    specializationName: { type: 'string' },
+                    specializationShortName: { type: 'string' },
+                    facultyName: { type: 'string' }
+                  }
+                }
+              }
+            }
+          }
+        },
+        401: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        },
+        404: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        }
+      }
+    }
+  }, UserController.getMyStudentInfo);
 }

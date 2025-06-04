@@ -1,5 +1,5 @@
 {
-  "name": "uniSync",
+  "name": "unisync-backend",
   "version": "1.0.0",
   "main": "dist/server.js",
   "type": "commonjs",

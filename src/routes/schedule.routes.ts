@@ -1,10 +1,61 @@
 import { FastifyInstance } from "fastify";
-import { getMySchedule, getScheduleByGroup, getWeeklySchedule } from "../controllers/schedule.controller";
+import { getMySchedule, getScheduleByGroup, getWeeklySchedule, getSummarizedSchedule } from "../controllers/schedule.controller";
 import { authJWT } from "../middlewares/auth.jwt.middleware";
 
 export default async function scheduleRoutes(fastify: FastifyInstance) {
   // Add JWT authentication hook for all routes
   fastify.addHook('onRequest', authJWT);
+
+  // Get summarized schedule
+  fastify.get("/summarized", {
+    schema: {
+      tags: ['Schedule'],
+      summary: 'Get summarized schedule',
+      description: 'Get a summarized version of the schedule for the authenticated user',
+      security: [{ bearerAuth: [] }],
+      response: {
+        200: {
+          description: 'Successful response',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            data: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  courseCode: { type: 'string' },
+                  courseTitle: { type: 'string' },
+                  courseType: { type: 'string', enum: ['LECTURE', 'SEMINAR', 'LAB'] },
+                  teacherName: { type: 'string' },
+                  weekDay: { type: 'string', enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] },
+                  startTime: { type: 'string', format: 'time' },
+                  endTime: { type: 'string', format: 'time' },
+                  room: { type: 'string' }
+                }
+              }
+            }
+          }
+        },
+        403: {
+          description: 'Access denied',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        },
+        500: {
+          description: 'Internal server error',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        }
+      }
+    }
+  }, getSummarizedSchedule);
 
   // Get my schedule
   fastify.get("/my", {

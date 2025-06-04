@@ -71,27 +71,51 @@ export const getMySchedule = async (request: FastifyRequest, reply: FastifyReply
     }
 
     // 4. Format the data for frontend (camelCase)
-    const formattedSchedule = (scheduleData ?? []).map((entry: any) => ({
-      scheduleId: entry.schedule_id,
-      courseId: entry.course_id,
-      courseCode: entry.course_code,
-      courseTitle: entry.course_title,
-      courseType: entry.course_type || 'LECTURE',
-      teacherName: entry.teacher_name || 'N/A',
-      weekDay: weekDayToNumber[entry.week_day as WeekDay],
-      startTime: entry.start_time,
-      endTime: entry.end_time,
-      room: entry.room,
-      parity: entry.parity,
-      groupId: entry.group_id,
-      groupName: entry.group_name,
-      groupIndex: entry.group_index,
-      weeks: entry.weeks
-    }));
+    const formattedSchedule = (scheduleData ?? []).map((entry: any) => {
+      // Convert week_day to number safely
+      let weekDayNumber: number;
+      try {
+        weekDayNumber = parseInt(entry.week_day);
+        if (isNaN(weekDayNumber)) {
+          // If parsing fails, use the weekDayToNumber mapping
+          weekDayNumber = weekDayToNumber[entry.week_day as WeekDay] || 1;
+        }
+      } catch {
+        weekDayNumber = 1; // Default to Monday if conversion fails
+      }
+
+      return {
+        scheduleId: entry.schedule_id,
+        courseId: entry.course_id,
+        courseCode: entry.course_code,
+        courseTitle: entry.course_title,
+        courseType: entry.course_type || 'LECTURE',
+        teacherName: entry.teacher_name || 'N/A',
+        weekDay: weekDayNumber,
+        startTime: entry.start_time,
+        endTime: entry.end_time,
+        room: entry.room,
+        parity: entry.parity,
+        groupId: entry.group_id,
+        groupName: entry.group_name,
+        groupIndex: entry.group_index,
+        weeks: entry.weeks
+      };
+    });
+
+    // 5. Sort the schedule data
+    const sortedSchedule = formattedSchedule.sort((a, b) => {
+      // First sort by weekday
+      if (a.weekDay !== b.weekDay) {
+        return a.weekDay - b.weekDay;
+      }
+      // If same weekday, sort by start time
+      return a.startTime.localeCompare(b.startTime);
+    });
 
     return reply.send({
       success: true,
-      data: formattedSchedule
+      data: sortedSchedule
     });
 
   } catch (err) {
@@ -506,6 +530,119 @@ export const getWeeklySchedule = async (request: FastifyRequest, reply: FastifyR
 
   } catch (err) {
     console.error('Unhandled error in getWeeklySchedule:', err);
+    return reply.status(500).send({
+      success: false,
+      message: 'Internal server error.'
+    });
+  }
+};
+
+export const getSummarizedSchedule = async (request: FastifyRequest, reply: FastifyReply) => {
+  try {
+    // 1. User authentication
+    const user = request.user as User;
+
+    if (!user || user.role.toLowerCase() !== 'student') {
+      return reply.status(403).send({
+        success: false,
+        message: 'Access denied – only students can access schedule.'
+      });
+    }
+
+    // 2. Get student's group_id
+    const { data: student, error: studentError } = await supabase
+      .from('students')
+      .select('group_id')
+      .eq('user_id', user.userId)
+      .single();
+
+    if (studentError || !student) {
+      return reply.status(404).send({
+        success: false,
+        message: 'Student record not found.'
+      });
+    }
+
+    // 3. Get schedule from full_schedule_view
+    const { data: scheduleData, error: scheduleError } = await supabase
+      .from('full_schedule_view')
+      .select(`
+        schedule_id,
+        course_id,
+        course_code,
+        course_title,
+        course_type,
+        teacher_name,
+        week_day,
+        start_time,
+        end_time,
+        room,
+        parity,
+        group_id,
+        group_name,
+        group_index,
+        weeks
+      `)
+      .eq('group_id', student.group_id);
+
+    if (scheduleError) {
+      console.error('Error fetching summarized schedule:', scheduleError);
+      return reply.status(500).send({
+        success: false,
+        message: 'Failed to fetch schedule from database.'
+      });
+    }
+
+    // 4. Format the data first
+    const formattedSchedule = (scheduleData || []).map(entry => {
+      // Convert week_day to number safely
+      let weekDayNumber: number;
+      try {
+        weekDayNumber = parseInt(entry.week_day);
+        if (isNaN(weekDayNumber)) {
+          // If parsing fails, use the weekDayToNumber mapping
+          weekDayNumber = weekDayToNumber[entry.week_day as WeekDay] || 1;
+        }
+      } catch {
+        weekDayNumber = 1; // Default to Monday if conversion fails
+      }
+
+      return {
+        scheduleId: entry.schedule_id,
+        courseId: entry.course_id,
+        courseCode: entry.course_code,
+        courseTitle: entry.course_title,
+        courseType: entry.course_type,
+        teacherName: entry.teacher_name,
+        weekDay: weekDayNumber,
+        startTime: entry.start_time,
+        endTime: entry.end_time,
+        room: entry.room,
+        parity: entry.parity,
+        groupId: entry.group_id,
+        groupName: entry.group_name,
+        groupIndex: entry.group_index,
+        weeks: entry.weeks
+      };
+    });
+
+    // 5. Sort the schedule data
+    const sortedSchedule = formattedSchedule.sort((a, b) => {
+      // First sort by weekday
+      if (a.weekDay !== b.weekDay) {
+        return a.weekDay - b.weekDay;
+      }
+      // If same weekday, sort by start time
+      return a.startTime.localeCompare(b.startTime);
+    });
+
+    return reply.send({
+      success: true,
+      data: sortedSchedule
+    });
+
+  } catch (err) {
+    console.error('Unhandled error in getSummarizedSchedule:', err);
     return reply.status(500).send({
       success: false,
       message: 'Internal server error.'

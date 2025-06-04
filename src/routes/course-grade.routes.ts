@@ -124,13 +124,22 @@ export default async function courseGradeRoutes(fastify: FastifyInstance) {
     }
   }, courseGradeController.getMyGrades);
 
+  // getSummarizedGrades
+  fastify.get('/summarized', {
+    schema: {
+      tags: ['Grades'],
+      summary: 'Get summarized grades',
+      description: 'Get summarized grades for the authenticated user',
+    },
+    handler: courseGradeController.getSummarizedGrades
+  });
+
   // Get all grades for a student
   fastify.get('/student/:studentId', {
     schema: {
       tags: ['Grades'],
       summary: 'Get all grades for a student',
       description: 'Get all grades for a specific student',
-      security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
         required: ['studentId'],

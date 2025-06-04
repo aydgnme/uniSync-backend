@@ -71,10 +71,16 @@ export const AuthController = {
         expiresIn: '24h'
       });
 
-      logger.info('Login successful:', { userId: user.id });
+      // Create session
+      const ipAddress = request.ip;
+      const deviceInfo = request.headers['user-agent'] || 'Unknown';
+      const session = await AuthService.createSession(user.id, ipAddress, deviceInfo);
+
+      logger.info('Login successful:', { userId: user.id, sessionId: session.id });
 
       return reply.code(200).send({
         token,
+        sessionId: session.id,
         user: {
           id: user.id,
           email: user.email,
@@ -476,7 +482,14 @@ export const AuthController = {
 
   async logout(request: FastifyRequest, reply: FastifyReply) {
     try {
-      logger.info('Logout request');
+      const sessionId = request.headers['x-session-id'] as string;
+      
+      if (sessionId) {
+        await AuthService.endSession(sessionId);
+        logger.info('Session ended:', { sessionId });
+      }
+
+      logger.info('Logout successful');
       return reply.code(200).send({
         message: 'Logout successful',
         success: true
@@ -485,6 +498,40 @@ export const AuthController = {
       logger.error('Logout error:', error);
       return reply.code(500).send({
         message: 'Server error',
+        code: 'INTERNAL_SERVER_ERROR'
+      });
+    }
+  },
+
+  async getUserSessions(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      const userId = request.user.userId;
+      const sessions = await AuthService.getUserSessions(userId);
+
+      return reply.code(200).send({
+        sessions
+      });
+    } catch (error) {
+      logger.error('Get user sessions error:', error);
+      return reply.code(500).send({
+        message: 'Failed to get user sessions',
+        code: 'INTERNAL_SERVER_ERROR'
+      });
+    }
+  },
+
+  async getActiveSessions(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      const userId = request.user.userId;
+      const sessions = await AuthService.getActiveSessions(userId);
+
+      return reply.code(200).send({
+        sessions
+      });
+    } catch (error) {
+      logger.error('Get active sessions error:', error);
+      return reply.code(500).send({
+        message: 'Failed to get active sessions',
         code: 'INTERNAL_SERVER_ERROR'
       });
     }
