@@ -5,6 +5,7 @@ import scheduleRoutes from './schedule.routes';
 import timeRoutes from './time.routes';
 import courseGradeRoutes from './course-grade.routes';
 import classroomRoutes from './classroom.routes';
+import universityAnnouncementRoutes from './universityAnnouncement.routes';
 
 export async function registerRoutes(fastify: FastifyInstance) {
   // Register all routes under /api prefix
@@ -14,4 +15,5 @@ export async function registerRoutes(fastify: FastifyInstance) {
   fastify.register(timeRoutes, { prefix: '/api/time' });
   fastify.register(courseGradeRoutes, { prefix: '/api/grades' });
   fastify.register(classroomRoutes, { prefix: '/api/classroom' });
+  fastify.register(universityAnnouncementRoutes, { prefix: '/api' });
 }

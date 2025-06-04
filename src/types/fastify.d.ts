@@ -6,13 +6,14 @@ import '@fastify/jwt';
 declare module 'fastify' {
   interface FastifyInstance {
     multipartHandler: (req: any, reply: any) => Promise<void>;
+    authenticate: (request: FastifyRequest, reply: any) => Promise<void>;
   }
 
   interface FastifyRequest {
     user: {
       userId: string;
       email: string;
-      role: 'student' | 'staff' | 'admin' | 'anon';
+      role: 'student' | 'staff' | 'admin';
     };
     apiKey?: ApiKey;
   }

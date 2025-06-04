@@ -8,6 +8,7 @@ import jwt from '@fastify/jwt';
 import { schemas } from '../schemas/index';
 import { swaggerOptions } from '../config/swagger';
 import { registerRoutes } from '../routes';
+import { multipartOptions } from '../config/multipart';
 
 const buildServer = async (): Promise<FastifyInstance> => {
   const app = Fastify({
@@ -59,11 +60,7 @@ const buildServer = async (): Promise<FastifyInstance> => {
     credentials: true
   });
 
-  await app.register(multipart, {
-    limits: {
-      fileSize: 10 * 1024 * 1024 // 10MB
-    }
-  });
+  await app.register(multipart, multipartOptions);
 
   await app.register(formbody);
 
