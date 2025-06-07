@@ -13,7 +13,8 @@ import {
   verifyResetCodeSchema,
   resetPasswordSchema,
   checkUserSchema,
-  findUserSchema
+  findUserSchema,
+  changePasswordSchema
 } from '../schemas/auth.schemas';
 
 interface JwtPayload {
@@ -532,6 +533,85 @@ export const AuthController = {
       logger.error('Get active sessions error:', error);
       return reply.code(500).send({
         message: 'Failed to get active sessions',
+        code: 'INTERNAL_SERVER_ERROR'
+      });
+    }
+  },
+
+  async changePassword(request: FastifyRequest<{ Body: z.infer<typeof changePasswordSchema> }>, reply: FastifyReply) {
+    try {
+      if (!request.user) {
+        return reply.code(401).send({
+          message: 'Unauthorized',
+          code: 'UNAUTHORIZED'
+        });
+      }
+
+      const body = changePasswordSchema.parse(request.body);
+      logger.info('Change password request:', { userId: request.user.userId });
+
+      // Get user from database
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', request.user.userId)
+        .single();
+
+      if (userError || !user) {
+        logger.warn('User not found:', { userId: request.user.userId });
+        return reply.code(404).send({
+          message: 'User not found',
+          code: 'USER_NOT_FOUND'
+        });
+      }
+
+      // Verify current password
+      const isValidPassword = await bcrypt.compare(body.currentPassword, user.password_hash);
+      if (!isValidPassword) {
+        logger.warn('Invalid current password:', { userId: request.user.userId });
+        return reply.code(401).send({
+          message: 'Current password is incorrect',
+          code: 'INVALID_PASSWORD'
+        });
+      }
+
+      // Hash new password
+      const password_hash = await bcrypt.hash(body.newPassword, 10);
+
+      // Update password
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ password_hash })
+        .eq('id', request.user.userId);
+
+      if (updateError) {
+        logger.error('Error updating password:', updateError);
+        return reply.code(500).send({
+          message: 'Failed to update password',
+          code: 'UPDATE_FAILED'
+        });
+      }
+
+      logger.info('Password changed successfully:', { userId: request.user.userId });
+
+      return reply.code(200).send({
+        message: 'Password changed successfully',
+        success: true
+      });
+    } catch (error) {
+      logger.error('Change password error:', error);
+      if (error instanceof z.ZodError) {
+        return reply.code(400).send({
+          message: 'Validation error',
+          code: 'VALIDATION_ERROR',
+          details: error.errors.map(err => ({
+            path: err.path.join('.'),
+            message: err.message
+          }))
+        });
+      }
+      return reply.code(500).send({
+        message: 'Internal server error',
         code: 'INTERNAL_SERVER_ERROR'
       });
     }

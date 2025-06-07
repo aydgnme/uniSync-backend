@@ -540,4 +540,189 @@ export default async function userRoutes(fastify: FastifyInstance) {
       }
     }
   }, UserController.getMyStudentInfo);
+
+  // Change password endpoint
+  fastify.post('/change-password', {
+    schema: {
+      tags: ['Users'],
+      summary: 'Change user password',
+      description: 'Change password for authenticated user',
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['currentPassword', 'newPassword', 'confirmPassword'],
+        properties: {
+          currentPassword: { type: 'string', minLength: 6 },
+          newPassword: { type: 'string', minLength: 6 },
+          confirmPassword: { type: 'string', minLength: 6 }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' },
+            success: { type: 'boolean' }
+          },
+          required: ['message', 'success']
+        },
+        400: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' },
+            code: { type: 'string' },
+            details: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  path: { type: 'string' },
+                  message: { type: 'string' }
+                }
+              }
+            }
+          }
+        },
+        401: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' },
+            code: { type: 'string' }
+          }
+        },
+        404: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' },
+            code: { type: 'string' }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' },
+            code: { type: 'string' }
+          }
+        }
+      }
+    }
+  }, UserController.changePassword);
+
+  // Get user sessions
+  fastify.get('/sessions', {
+    schema: {
+      tags: ['Users'],
+      summary: 'Get user sessions',
+      description: 'Get all sessions for the authenticated user',
+      security: [{ bearerAuth: [] }],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            sessions: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  user_id: { type: 'string', format: 'uuid' },
+                  login_time: { type: 'string', format: 'date-time' },
+                  logout_time: { type: ['string', 'null'], format: 'date-time' },
+                  ip_address: { type: 'string' },
+                  device_info: { type: 'string' }
+                }
+              }
+            }
+          }
+        },
+        401: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' },
+            code: { type: 'string' }
+          }
+        }
+      }
+    }
+  }, UserController.getSessions);
+
+  // Logout all sessions endpoint
+  fastify.post('/sessions/logout-all', {
+    schema: {
+      tags: ['Users'],
+      summary: 'Logout all sessions',
+      description: 'Logout all sessions for the authenticated user',
+      security: [{ bearerAuth: [] }],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' },
+            success: { type: 'boolean' }
+          }
+        },
+        401: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' },
+            code: { type: 'string' }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' },
+            code: { type: 'string' }
+          }
+        }
+      }
+    }
+  }, UserController.logoutAllSessions);
+
+  // Logout current session endpoint
+  fastify.post('/sessions/logout', {
+    schema: {
+      tags: ['Users'],
+      summary: 'Logout current session',
+      description: 'Logout the current session for the authenticated user',
+      security: [{ bearerAuth: [] }],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' },
+            success: { type: 'boolean' }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' },
+            code: { type: 'string' }
+          }
+        },
+        401: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' },
+            code: { type: 'string' }
+          }
+        },
+        404: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' },
+            code: { type: 'string' }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' },
+            code: { type: 'string' }
+          }
+        }
+      }
+    }
+  }, UserController.logoutCurrentSession);
 }

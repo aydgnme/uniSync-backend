@@ -1,8 +1,12 @@
 // src/routes/auth.routes.ts
 import { FastifyInstance } from 'fastify';
 import { AuthController } from '../controllers/auth.controller';
+import { authJWT } from '../middlewares/auth.jwt.middleware';
 
 export default async function authRoutes(fastify: FastifyInstance) {
+  // Add JWT middleware to all routes
+  fastify.addHook('onRequest', authJWT);
+
   // Login endpoint
   fastify.post('/login', {
     schema: {

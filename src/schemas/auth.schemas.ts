@@ -96,6 +96,16 @@ export const findUserSchema = z.object({
   matriculationNumber: z.string().min(1, 'Matriculation number is required')
 });
 
+// Change password schema
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(6, 'Current password must be at least 6 characters'),
+  newPassword: z.string().min(6, 'New password must be at least 6 characters'),
+  confirmPassword: z.string().min(6, 'Confirm password must be at least 6 characters')
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"]
+});
+
 // OpenAPI definitions
 export const authSchemas = {
   AuthResponse: {
