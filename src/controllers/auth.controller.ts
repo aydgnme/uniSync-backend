@@ -114,6 +114,62 @@ export const AuthController = {
     }
   },
 
+  async refreshToken(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      const sessionId = request.headers['x-session-id'] as string;
+      
+      if (!sessionId) {
+        logger.warn('No session ID provided for token refresh');
+        return reply.code(401).send({
+          message: 'No session ID provided',
+          code: 'NO_SESSION_ID'
+        });
+      }
+
+      // Get session from database
+      const { data: session, error: sessionError } = await supabase
+        .from('user_sessions')
+        .select('*, users(*)')
+        .eq('id', sessionId)
+        .is('logout_time', null)
+        .single();
+
+      if (sessionError || !session) {
+        logger.warn('Invalid or expired session:', { sessionId });
+        return reply.code(401).send({
+          message: 'Invalid or expired session',
+          code: 'INVALID_SESSION'
+        });
+      }
+
+      // Generate new JWT token
+      const token = request.server.jwt.sign({
+        userId: session.users.id,
+        email: session.users.email,
+        role: session.users.role
+      }, {
+        expiresIn: '24h'
+      });
+
+      logger.info('Token refreshed successfully:', { userId: session.users.id });
+
+      return reply.code(200).send({
+        token,
+        user: {
+          id: session.users.id,
+          email: session.users.email,
+          role: session.users.role
+        }
+      });
+    } catch (error) {
+      logger.error('Token refresh error:', error);
+      return reply.code(401).send({
+        message: 'Failed to refresh token',
+        code: 'REFRESH_FAILED'
+      });
+    }
+  },
+
   async generateResetCode(request: FastifyRequest<{ Body: z.infer<typeof generateResetCodeSchema> }>, reply: FastifyReply) {
     try {
       const body = generateResetCodeSchema.parse(request.body);

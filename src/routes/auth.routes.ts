@@ -48,6 +48,38 @@ export default async function authRoutes(fastify: FastifyInstance) {
     }
   }, AuthController.login);
 
+  // Refresh token endpoint
+  fastify.post('/refresh-token', {
+    schema: {
+      tags: ['Auth'],
+      summary: 'Refresh JWT token',
+      description: 'Refresh the JWT token using the current session',
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            token: { type: 'string' },
+            user: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                email: { type: 'string' },
+                role: { type: 'string', enum: ['student', 'staff', 'admin'] }
+              },
+              required: ['id', 'email', 'role']
+            }
+          },
+          required: ['token', 'user']
+        },
+        401: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' }
+          }
+        }
+      }
+    }
+  }, AuthController.refreshToken);
 
   // Find user endpoint
   fastify.post('/find-user', {

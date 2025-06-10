@@ -1,5 +1,3 @@
-import { Document } from "mongoose";
-
 export interface ISchedule {
   facultyId: string;
   groupId: string;
