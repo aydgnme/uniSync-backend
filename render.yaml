@@ -2,7 +2,7 @@ services:
   - type: web
     name: unisync-backend
     env: docker
-    region: oregon
+    region: frankfurt
     plan: starter
     healthCheckPath: /health
     envVars:
@@ -10,15 +10,15 @@ services:
         value: production
       - key: PORT
         value: 3000
+      - key: JWT_SECRET
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
     autoDeploy: true
     branch: main
-
-  - type: cron
-    name: unisync-cron
-    env: docker
-    region: oregon
-    schedule: "0 0 * * *"  # Her gün gece yarısı çalışır
-    envVars:
-      - key: NODE_ENV
-        value: production
-    command: npm run fetch-professors 
