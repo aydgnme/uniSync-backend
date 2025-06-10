@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: unisync-backend
+    env: docker
+    region: oregon
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+    autoDeploy: true
+    branch: main
+
+  - type: cron
+    name: unisync-cron
+    env: docker
+    region: oregon
+    schedule: "0 0 * * *"  # Her gün gece yarısı çalışır
+    envVars:
+      - key: NODE_ENV
+        value: production
+    command: npm run fetch-professors 
