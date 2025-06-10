@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
-import * as bcrypt from 'bcryptjs';
+import { logger } from '../utils/logger';
+import bcrypt from 'bcrypt';
 import { z } from 'zod';
 import {
   registerSchema,
@@ -19,73 +20,59 @@ type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 type CheckUserInput = z.infer<typeof checkUserSchema>;
 type FindUserInput = z.infer<typeof findUserSchema>;
 
-export const AuthService = {
-  async register(data: RegisterInput) {
-    const normalizedEmail = data.email.toLowerCase().trim();
+interface AcademicInfo {
+  is_modular: boolean;
+  faculty_id?: string | null;
+  group_name?: string | null;
+  gpa?: number | null;
+  study_year?: number;
+  semester?: number;
+  subgroup?: string;
+  advisor?: string;
+  specialization_id?: string;
+}
 
-    // Check if user already exists
-    const { data: existingUser } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', normalizedEmail)
-      .single();
+interface UserData {
+  email: string;
+  date_of_birth?: string;
+  academicInfo?: AcademicInfo;
+  matriculationNumber?: string;
+}
 
-    if (existingUser) {
-      throw new Error('Email already registered');
+export class AuthService {
+  async register(data: {
+    email: string;
+    password: string;
+    first_name: string;
+    last_name: string;
+    role: string;
+    date_of_birth?: string;
+    academicInfo?: AcademicInfo;
+  }) {
+    try {
+      const hashedPassword = await bcrypt.hash(data.password, 10);
+      
+      const { data: user, error } = await supabase
+        .from('users')
+        .insert({
+          email: data.email,
+          password_hash: hashedPassword,
+          first_name: data.first_name,
+          last_name: data.last_name,
+          role: data.role,
+          date_of_birth: data.date_of_birth,
+          academic_info: data.academicInfo
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return user;
+    } catch (error) {
+      logger.error('Registration error:', error);
+      throw error;
     }
-
-    // Hash password
-    const password_hash = await bcrypt.hash(data.password, 10);
-
-    // Create user
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .insert({
-        email: normalizedEmail,
-        password_hash,
-        first_name: data.first_name,
-        last_name: data.last_name,
-        role: 'student',
-        phone_number: data.phone_number,
-        gender: data.gender,
-        date_of_birth: data.date_of_birth.split('.').reverse().join('-'),
-        nationality: data.nationality
-      })
-      .select()
-      .single();
-
-    if (userError || !user) {
-      console.error('User creation error:', userError);
-      throw new Error(`Failed to create user: ${userError?.message || 'Unknown error'}`);
-    }
-
-    // Create student record
-    const { error: studentError } = await supabase
-      .from('students')
-      .insert({
-        user_id: user.id,
-        cnp: data.cnp,
-        matriculation_number: data.matriculation_number,
-        study_year: data.academicInfo.study_year,
-        semester: data.academicInfo.semester,
-        group_name: data.academicInfo.group_name,
-        subgroup: data.academicInfo.subgroup || null,
-        advisor: data.academicInfo.advisor,
-        is_modular: data.academicInfo.is_modular,
-        gpa: data.academicInfo.gpa,
-        faculty_id: data.academicInfo.faculty_id,
-        specialization_id: data.academicInfo.specialization_id
-      });
-
-    if (studentError) {
-      console.error('Student record creation error:', studentError);
-      // Rollback user creation
-      await supabase.from('users').delete().eq('id', user.id);
-      throw new Error(`Failed to create student record: ${studentError.message}`);
-    }
-
-    return user;
-  },
+  }
 
   async login(data: LoginInput) {
     const normalizedEmail = data.email.toLowerCase().trim();
@@ -106,7 +93,7 @@ export const AuthService = {
     }
 
     return user;
-  },
+  }
 
   async checkUser(data: CheckUserInput) {
     const { data: user, error } = await supabase
@@ -124,133 +111,116 @@ export const AuthService = {
     }
 
     return user;
-  },
+  }
 
-  async findUserByCnpAndMatriculation(data: FindUserInput) {
-    const { data: student, error } = await supabase
-      .from('students')
-      .select('*, users(*)')
-      .eq('cnp', data.cnp)
-      .eq('matriculation_number', data.matriculation_number)
-      .single();
+  async findUserByEmail(email: string) {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', email)
+        .single();
 
-    if (error || !student) {
-      throw new Error('User not found');
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      logger.error('Find user error:', error);
+      throw error;
     }
+  }
 
-    return student;
-  },
+  async findUserByCnpAndMatriculation(cnp: string, matriculationNumber: string) {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('cnp', cnp)
+        .eq('matriculation_number', matriculationNumber)
+        .single();
 
-  async generateResetCode(data: GenerateResetCodeInput) {
-    // Find student
-    const { data: student, error: studentError } = await supabase
-      .from('students')
-      .select('user_id')
-      .eq('cnp', data.cnp)
-      .eq('matriculation_number', data.matriculation_number)
-      .single();
-
-    if (studentError || !student) {
-      throw new Error('User not found');
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      logger.error('Find user error:', error);
+      throw error;
     }
+  }
 
-    // Generate reset code
-    const reset_code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expires_at = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes
+  async generateResetCode(cnp: string, matriculationNumber: string) {
+    try {
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      
+      const { error } = await supabase
+        .from('password_resets')
+        .insert({
+          cnp,
+          matriculation_number: matriculationNumber,
+          reset_code: code,
+          expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString()
+        });
 
-    // Create reset request
-    const { error: resetError } = await supabase
-      .from('password_reset_requests')
-      .insert({
-        cnp: data.cnp,
-        matriculation_number: data.matriculation_number,
-        reset_code,
-        expires_at
-      });
-
-    if (resetError) {
-      throw new Error('Failed to generate reset code');
+      if (error) throw error;
+      return code;
+    } catch (error) {
+      logger.error('Generate reset code error:', error);
+      throw error;
     }
+  }
 
-    // Get user email
-    const { data: user } = await supabase
-      .from('users')
-      .select('email')
-      .eq('id', student.user_id)
-      .single();
+  async verifyResetCode(cnp: string, matriculationNumber: string, code: string) {
+    try {
+      const { data, error } = await supabase
+        .from('password_resets')
+        .select('*')
+        .eq('cnp', cnp)
+        .eq('matriculation_number', matriculationNumber)
+        .eq('reset_code', code)
+        .gt('expires_at', new Date().toISOString())
+        .single();
 
-    return { email: user?.email, reset_code };
-  },
-
-  async verifyResetCode(data: VerifyResetCodeInput) {
-    const { data: resetRequest, error } = await supabase
-      .from('password_reset_requests')
-      .select('*')
-      .eq('cnp', data.cnp)
-      .eq('matriculation_number', data.matriculation_number)
-      .eq('reset_code', data.reset_code)
-      .gt('expires_at', new Date().toISOString())
-      .is('used_at', null)
-      .single();
-
-    if (error || !resetRequest) {
-      throw new Error('Invalid or expired reset code');
+      if (error) throw error;
+      return !!data;
+    } catch (error) {
+      logger.error('Verify reset code error:', error);
+      throw error;
     }
+  }
 
-    return true;
-  },
+  async resetPassword(data: {
+    code: string;
+    cnp: string;
+    matriculationNumber: string;
+    newPassword: string;
+    confirmPassword: string;
+  }) {
+    try {
+      if (data.newPassword !== data.confirmPassword) {
+        throw new Error('Passwords do not match');
+      }
 
-  async resetPassword(data: ResetPasswordInput) {
-    if (data.new_password !== data.confirm_password) {
-      throw new Error('Passwords do not match');
+      const hashedPassword = await bcrypt.hash(data.newPassword, 10);
+
+      const { error: resetError } = await supabase
+        .from('password_resets')
+        .update({ used: true })
+        .eq('cnp', data.cnp)
+        .eq('matriculation_number', data.matriculationNumber)
+        .eq('reset_code', data.code);
+
+      if (resetError) throw resetError;
+
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ password_hash: hashedPassword })
+        .eq('cnp', data.cnp)
+        .eq('matriculation_number', data.matriculationNumber);
+
+      if (updateError) throw updateError;
+    } catch (error) {
+      logger.error('Reset password error:', error);
+      throw error;
     }
-
-    // Verify reset code
-    const { data: resetRequest, error: resetError } = await supabase
-      .from('password_reset_requests')
-      .select('*')
-      .eq('cnp', data.cnp)
-      .eq('matriculation_number', data.matriculation_number)
-      .eq('reset_code', data.reset_code)
-      .gt('expires_at', new Date().toISOString())
-      .is('used_at', null)
-      .single();
-
-    if (resetError || !resetRequest) {
-      throw new Error('Invalid or expired reset code');
-    }
-
-    // Get user ID
-    const { data: student } = await supabase
-      .from('students')
-      .select('user_id')
-      .eq('cnp', data.cnp)
-      .eq('matriculation_number', data.matriculation_number)
-      .single();
-
-    if (!student) {
-      throw new Error('User not found');
-    }
-
-    // Update password
-    const password_hash = await bcrypt.hash(data.new_password, 10);
-    const { error: updateError } = await supabase
-      .from('users')
-      .update({ password_hash })
-      .eq('id', student.user_id);
-
-    if (updateError) {
-      throw new Error('Failed to update password');
-    }
-
-    // Mark reset code as used
-    await supabase
-      .from('password_reset_requests')
-      .update({ used_at: new Date().toISOString() })
-      .eq('id', resetRequest.id);
-
-    return true;
-  },
+  }
 
   async createSession(userId: string, ipAddress: string, deviceInfo: string) {
     const { data: session, error } = await supabase
@@ -268,7 +238,7 @@ export const AuthService = {
     }
 
     return session;
-  },
+  }
 
   async endSession(sessionId: string) {
     const { error } = await supabase
@@ -281,7 +251,7 @@ export const AuthService = {
     }
 
     return true;
-  },
+  }
 
   async getUserSessions(userId: string) {
     const { data: sessions, error } = await supabase
@@ -295,7 +265,7 @@ export const AuthService = {
     }
 
     return sessions;
-  },
+  }
 
   async getActiveSessions(userId: string) {
     const { data: sessions, error } = await supabase
@@ -311,4 +281,4 @@ export const AuthService = {
 
     return sessions;
   }
-};
+}
