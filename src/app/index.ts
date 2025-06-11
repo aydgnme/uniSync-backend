@@ -5,6 +5,7 @@ import formbody from '@fastify/formbody';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import jwt from '@fastify/jwt';
+import rateLimit from '@fastify/rate-limit';
 import { schemas } from '../schemas/index';
 import { swaggerOptions } from '../config/swagger';
 import { registerRoutes } from '../routes';
@@ -25,6 +26,21 @@ const buildServer = async (): Promise<FastifyInstance> => {
           errorLikeObjectKeys: ['err', 'error'],
           errorProps: 'message,stack,code,type'
         }
+      }
+    }
+  });
+
+  // Register rate limiting
+  await app.register(rateLimit, {
+    max: 100,
+    timeWindow: '1 minute',
+    allowList: ['127.0.0.1'],
+    errorResponseBuilder: function (request, context) {
+      return {
+        statusCode: 429,
+        error: 'Too Many Requests',
+        message: `Rate limit exceeded, retry in ${context.after}`,
+        expiresIn: context.after
       }
     }
   });

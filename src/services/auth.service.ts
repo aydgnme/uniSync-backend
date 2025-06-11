@@ -11,6 +11,8 @@ import {
   checkUserSchema,
   findUserSchema
 } from '../schemas/auth.schemas';
+import jwt from 'jsonwebtoken';
+import { config } from '../config';
 
 type RegisterInput = z.infer<typeof registerSchema>;
 type LoginInput = z.infer<typeof loginSchema>;
@@ -39,6 +41,16 @@ interface UserData {
   matriculationNumber?: string;
 }
 
+interface Student {
+  matriculation_number: string;
+}
+
+interface User {
+  id: string;
+  email: string;
+  students: Student | Student[] | null;
+}
+
 export class AuthService {
   async register(data: {
     email: string;
@@ -51,20 +63,20 @@ export class AuthService {
   }) {
     try {
       const hashedPassword = await bcrypt.hash(data.password, 10);
-      
+
       const { data: user, error } = await supabase
-        .from('users')
-        .insert({
+      .from('users')
+      .insert({
           email: data.email,
           password_hash: hashedPassword,
-          first_name: data.first_name,
-          last_name: data.last_name,
+        first_name: data.first_name,
+        last_name: data.last_name,
           role: data.role,
           date_of_birth: data.date_of_birth,
           academic_info: data.academicInfo
-        })
-        .select()
-        .single();
+      })
+      .select()
+      .single();
 
       if (error) throw error;
       return user;
@@ -98,7 +110,7 @@ export class AuthService {
   async checkUser(data: CheckUserInput) {
     const { data: user, error } = await supabase
       .from('users')
-      .select('*, students!inner(matriculation_number)')
+      .select('*, students(matriculation_number)')
       .eq('email', data.email)
       .single();
 
@@ -106,25 +118,30 @@ export class AuthService {
       throw new Error('User not found');
     }
 
-    if (user.students.matriculation_number !== data.matriculation_number) {
+    // @ts-ignore - Supabase response type is not correctly inferred
+    const typedUser = user as User;
+    const student = Array.isArray(typedUser.students) ? typedUser.students[0] : typedUser.students;
+    if (!student || student.matriculation_number !== data.matriculation_number) {
       throw new Error('Matriculation number does not match');
     }
 
-    return user;
+    return typedUser;
   }
 
   async findUserByEmail(email: string) {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('*')
+        .select('*, students(matriculation_number)')
         .eq('email', email)
         .single();
 
       if (error) throw error;
-      return data;
+
+      const user = data as User;
+      return user;
     } catch (error) {
-      logger.error('Find user error:', error);
+      logger.error('Error finding user by email:', error);
       throw error;
     }
   }
@@ -136,7 +153,7 @@ export class AuthService {
         .select('*')
         .eq('cnp', cnp)
         .eq('matriculation_number', matriculationNumber)
-        .single();
+      .single();
 
       if (error) throw error;
       return data;
@@ -152,12 +169,12 @@ export class AuthService {
       
       const { error } = await supabase
         .from('password_resets')
-        .insert({
+      .insert({
           cnp,
           matriculation_number: matriculationNumber,
           reset_code: code,
           expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString()
-        });
+      });
 
       if (error) throw error;
       return code;
@@ -171,12 +188,12 @@ export class AuthService {
     try {
       const { data, error } = await supabase
         .from('password_resets')
-        .select('*')
+      .select('*')
         .eq('cnp', cnp)
         .eq('matriculation_number', matriculationNumber)
         .eq('reset_code', code)
-        .gt('expires_at', new Date().toISOString())
-        .single();
+      .gt('expires_at', new Date().toISOString())
+      .single();
 
       if (error) throw error;
       return !!data;
@@ -195,22 +212,22 @@ export class AuthService {
   }) {
     try {
       if (data.newPassword !== data.confirmPassword) {
-        throw new Error('Passwords do not match');
-      }
+      throw new Error('Passwords do not match');
+    }
 
       const hashedPassword = await bcrypt.hash(data.newPassword, 10);
 
       const { error: resetError } = await supabase
         .from('password_resets')
         .update({ used: true })
-        .eq('cnp', data.cnp)
+      .eq('cnp', data.cnp)
         .eq('matriculation_number', data.matriculationNumber)
         .eq('reset_code', data.code);
 
       if (resetError) throw resetError;
 
-      const { error: updateError } = await supabase
-        .from('users')
+    const { error: updateError } = await supabase
+      .from('users')
         .update({ password_hash: hashedPassword })
         .eq('cnp', data.cnp)
         .eq('matriculation_number', data.matriculationNumber);
@@ -222,63 +239,80 @@ export class AuthService {
     }
   }
 
-  async createSession(userId: string, ipAddress: string, deviceInfo: string) {
-    const { data: session, error } = await supabase
-      .from('user_sessions')
-      .insert({
-        user_id: userId,
-        ip_address: ipAddress,
-        device_info: deviceInfo
-      })
-      .select()
-      .single();
+  async createSession(userId: string, deviceInfo: string) {
+    try {
+      logger.info('Creating session for user:', { userId, deviceInfo });
 
-    if (error) {
-      throw new Error('Failed to create session');
+      const { data: session, error } = await supabase
+        .from('user_sessions')
+        .insert({
+          user_id: userId,
+          device_info: deviceInfo,
+          login_time: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (error) {
+        logger.error('Supabase error creating session:', error);
+        throw error;
+      }
+
+      logger.info('Session created successfully:', { sessionId: session.id });
+      return session;
+    } catch (error) {
+      logger.error('Error creating session:', error);
+      throw error;
     }
-
-    return session;
   }
 
   async endSession(sessionId: string) {
-    const { error } = await supabase
-      .from('user_sessions')
-      .update({ logout_time: new Date().toISOString() })
-      .eq('id', sessionId);
+    try {
+      const { data, error } = await supabase
+        .from('sessions')
+        .update({ is_active: false, ended_at: new Date().toISOString() })
+        .eq('id', sessionId)
+        .select()
+        .single();
 
-    if (error) {
-      throw new Error('Failed to end session');
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      logger.error('Error ending session:', error);
+      throw error;
     }
-
-    return true;
   }
 
   async getUserSessions(userId: string) {
-    const { data: sessions, error } = await supabase
-      .from('user_sessions')
-      .select('*')
-      .eq('user_id', userId)
-      .order('login_time', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('sessions')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
 
-    if (error) {
-      throw new Error('Failed to get user sessions');
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      logger.error('Error fetching user sessions:', error);
+      throw error;
     }
-
-    return sessions;
   }
 
   async getActiveSessions(userId: string) {
-    const { data: sessions, error } = await supabase
-      .from('user_sessions')
-      .select('*')
-      .eq('user_id', userId)
-      .is('logout_time', null)
-      .order('login_time', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('sessions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
 
-    if (error) {
-      throw new Error('Failed to get active sessions');
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      logger.error('Error fetching active sessions:', error);
+      throw error;
     }
-
-    return sessions;
   }
 }

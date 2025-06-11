@@ -15,6 +15,17 @@ interface Specialization {
   short_name: string;
 }
 
+interface Course {
+  id: string;
+  name: string;
+  subgroup: string;
+  semester: number;
+  study_year: number;
+  specialization_id: string;
+  is_modular: boolean;
+  specializations: Specialization[];
+}
+
 interface Group {
   id: string;
   name: string;
@@ -154,313 +165,155 @@ const changePasswordSchema = z.object({
 export const UserController = {
   async getAllUsers(request: FastifyRequest, reply: FastifyReply) {
     try {
-      if (!request.user || request.user.role !== 'admin') {
-        return reply.code(403).send({
-          message: 'Access denied',
-          code: 'FORBIDDEN',
-          statusCode: 403
-        });
-      }
-
-      const { data: users, error } = await supabase
+      const { data, error } = await supabase
         .from('users')
-        .select('*, students(*)')
+        .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
-      return reply.code(200).send({ users });
-    } catch (error: unknown) {
+      return reply.send(data as User[]);
+    } catch (error) {
       logger.error('Error fetching users:', error);
-      return reply.code(500).send({
-        message: 'Error fetching users',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
+      return reply.status(500).send({ error: 'Internal server error' });
     }
   },
 
-  async getUserById(
-    request: FastifyRequest<{ Params: { id: string } }>,
-    reply: FastifyReply
-  ) {
+  async getUserById(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
     try {
-      logger.info('getUserById called with params:', request.params);
-      logger.info('User from request:', request.user);
-  
-      if (!request.user) {
-        logger.warn('No user found in request');
-        return reply.code(401).send({
-          success: false,
-          message: 'Unauthorized'
-        });
-      }
-  
-      const isAdmin = request.user.role.toLowerCase() === 'admin';
-      const isOwnProfile = request.user.userId === request.params.id;
-  
-      logger.info('Auth check:', { isAdmin, isOwnProfile, userId: request.params.id });
-  
-      if (!isAdmin && !isOwnProfile) {
-        logger.warn('Access denied - not admin and not own profile');
-        return reply.code(403).send({
-          success: false,
-          message: 'Access denied'
-        });
-      }
-  
-      const { data: user, error: userError } = await supabase
+      const { id } = request.params;
+
+      const { data, error } = await supabase
         .from('users')
-        .select(`
-          id,
-          first_name,
-          last_name,
-          email,
-          role,
-          phone_number,
-          gender,
-          date_of_birth,
-          nationality,
-          created_at,
-          last_login,
-          is_active,
-          students (
-            cnp,
-            matriculation_number,
-            advisor,
-            is_modular,
-            gpa,
-            group_id,
-            faculty_id,
-            faculty:faculties (
-              name
-            ),
-            groups (
-              id,
-              name,
-              subgroup,
-              semester,
-              study_year,
-              specialization_id,
-              is_modular,
-              specializations (
-                name,
-                short_name
-              )
-            )
-          )
-        `)
-        .eq('id', request.params.id)
+        .select('*, students(*)')
+        .eq('id', id)
         .single();
-  
-      if (userError) {
-        logger.error('Error fetching user:', userError);
-        return reply.code(500).send({
-          success: false,
-          message: 'Error fetching user'
-        });
+
+      if (error) throw error;
+      if (!data) {
+        return reply.status(404).send({ error: 'User not found' });
       }
-  
-      if (!user) {
-        logger.warn('User not found in database');
-        return reply.code(404).send({
-          success: false,
-          message: 'User not found'
-        });
-      }
-  
+
       // Handle array responses from Supabase
-      const student = Array.isArray(user.students) ? user.students[0] : user.students;
-      const group = Array.isArray(student?.groups) ? student.groups[0] : student?.groups;
-      const facultyName = Array.isArray(student?.faculty) ? (student.faculty[0] as Faculty)?.name : (student?.faculty as Faculty)?.name;
-      const specialization = Array.isArray(group?.specializations) ? group.specializations[0] : group?.specializations;
-
-      logger.info('Debug group data:', {
-        student,
-        group,
-        groupId: group?.id,
-        groupName: group?.name
-      });
-
+      const student = Array.isArray(data.students) ? data.students[0] : data.students;
       const response = {
-        success: true,
-        data: {
-          id: user.id,
-          email: user.email,
-          first_name: user.first_name,
-          last_name: user.last_name,
-          role: user.role,
-          phone_number: user.phone_number || '',
-          gender: user.gender || '',
-          date_of_birth: user.date_of_birth || '',
-          nationality: user.nationality || '',
-          created_at: user.created_at,
-          last_login: user.last_login,
-          is_active: user.is_active,
-          student_info: student
-            ? {
-                cnp: student.cnp || '',
-                matriculation_number: student.matriculation_number || '',
-                advisor: student.advisor || '',
-                gpa: student.gpa || 0,
-                faculty_id: student.faculty_id || '',
-                faculty_name: facultyName || '[N/A]',
-                group_id: group?.id || '',
-                group_name: group?.name || '[N/A]',
-                subgroup_index: group?.subgroup || '[N/A]',
-                semester: group?.semester ?? null,
-                study_year: group?.study_year ?? null,
-                is_modular: group?.is_modular ?? student.is_modular ?? false,
-                specialization_id: group?.specialization_id || null,
-                specialization_short_name: specialization?.short_name ?? '[N/A]',
-                specialization_name: specialization?.name ?? '[N/A]'
-              }
-            : null
-        }
+        ...data,
+        students: student
       };
 
-      // Log the exact response being sent
-      logger.info('Sending response:', JSON.stringify(response, null, 2));
-      return reply.code(200).send(response);
-    } catch (error: unknown) {
+      return reply.send(response as User & { students: Student });
+    } catch (error) {
       logger.error('Error fetching user:', error);
-      return reply.code(500).send({
-        success: false,
-        message: 'Error fetching user'
-      });
+      return reply.status(500).send({ error: 'Internal server error' });
     }
   },
 
-  async updateUser(
-    request: FastifyRequest<{
-      Params: { id: string };
-      Body: UpdateUserBody;
-    }>,
-    reply: FastifyReply
-  ) {
+  async updateUser(request: FastifyRequest<{
+    Params: { id: string };
+    Body: UpdateUserBody;
+  }>, reply: FastifyReply) {
     try {
-      if (!request.user) {
-        return reply.code(401).send({
-          message: 'Unauthorized',
-          code: 'UNAUTHORIZED',
-          statusCode: 401
-        });
-      }
+      const { id } = request.params;
+      const { first_name, last_name, phone_number, gender, date_of_birth, nationality } = request.body;
 
-      // Check if user is admin or updating their own profile
-      const isAdmin = request.user.role === 'admin';
-      const isOwnProfile = request.user.userId === request.params.id;
+      const updateData: Partial<User> = {};
+      if (first_name) updateData.first_name = first_name;
+      if (last_name) updateData.last_name = last_name;
+      if (phone_number) updateData.phone_number = phone_number;
+      if (gender) updateData.gender = gender;
+      if (date_of_birth) updateData.date_of_birth = date_of_birth;
+      if (nationality) updateData.nationality = nationality;
 
-      if (!isAdmin && !isOwnProfile) {
-        return reply.code(403).send({
-          message: 'Access denied',
-          code: 'FORBIDDEN',
-          statusCode: 403
-        });
-      }
-
-      const { data: user, error: userError } = await supabase
+      const { data, error } = await supabase
         .from('users')
-        .update({
-          first_name: request.body.first_name,
-          last_name: request.body.last_name,
-          phone_number: request.body.phone_number,
-          gender: request.body.gender,
-          date_of_birth: request.body.date_of_birth,
-          nationality: request.body.nationality
-        })
-        .eq('id', request.params.id)
+        .update(updateData)
+        .eq('id', id)
         .select()
         .single();
 
-      if (userError || !user) {
-        return reply.code(404).send({ message: 'User not found' });
-      }
+      if (error) throw error;
 
-      // Update student info if provided
-      if (request.body.academicInfo) {
-        const { error: studentError } = await supabase
-          .from('students')
-          .update({
-            study_year: request.body.academicInfo.study_year,
-            semester: request.body.academicInfo.semester,
-            group_name: request.body.academicInfo.group_name,
-            subgroup: request.body.academicInfo.subgroup,
-            advisor: request.body.academicInfo.advisor,
-            is_modular: request.body.academicInfo.is_modular,
-            gpa: request.body.academicInfo.gpa,
-            faculty_id: request.body.academicInfo.faculty_id,
-            specialization_id: request.body.academicInfo.specialization_id
-          })
-          .eq('user_id', request.params.id);
-
-        if (studentError) {
-          return reply.code(500).send({ message: 'Failed to update student information' });
-        }
-      }
-
-      // Get updated user with student info
-      const { data: updatedUser, error: fetchError } = await supabase
-        .from('users')
-        .select('*, students(*)')
-        .eq('id', request.params.id)
-        .single();
-
-      if (fetchError || !updatedUser) {
-        return reply.code(500).send({ message: 'Failed to fetch updated user' });
-      }
-
-      return reply.code(200).send(updatedUser);
-    } catch (error: unknown) {
-      logger.error('Error updating user:', error);
-      return reply.code(500).send({
-        message: 'Error updating user',
-        error: error instanceof Error ? error.message : 'Unknown error'
+      return reply.send({
+        message: 'User updated successfully',
+        user: data as User
       });
+    } catch (error) {
+      logger.error('Error updating user:', error);
+      return reply.status(500).send({ error: 'Internal server error' });
     }
   },
 
-  async deleteUser(
-    request: FastifyRequest<{ Params: { id: string } }>,
-    reply: FastifyReply
-  ) {
+  async deleteUser(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
     try {
-      if (!request.user || request.user.role !== 'admin') {
-        return reply.code(403).send({
-          message: 'Access denied. Admin privileges required.',
-          code: 'FORBIDDEN',
-          statusCode: 403
-        });
-      }
+      const { id } = request.params;
 
-      // Delete student record first (due to foreign key constraint)
-      const { error: studentError } = await supabase
-        .from('students')
-        .delete()
-        .eq('user_id', request.params.id);
-
-      if (studentError) {
-        return reply.code(500).send({ message: 'Failed to delete student record' });
-      }
-
-      // Delete user record
-      const { error: userError } = await supabase
+      const { error } = await supabase
         .from('users')
         .delete()
-        .eq('id', request.params.id);
+        .eq('id', id);
 
-      if (userError) {
-        return reply.code(500).send({ message: 'Failed to delete user' });
+      if (error) throw error;
+
+      return reply.send({ message: 'User deleted successfully' });
+    } catch (error) {
+      logger.error('Error deleting user:', error);
+      return reply.status(500).send({ error: 'Internal server error' });
+    }
+  },
+
+  async getCourses(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      const { data, error } = await supabase
+        .from('courses')
+        .select('*, specializations(*)')
+        .order('name', { ascending: true });
+
+      if (error) throw error;
+
+      // Handle array responses from Supabase
+      const courses = (data || []).map(course => {
+        const specialization = Array.isArray(course.specializations) ? course.specializations[0] : course.specializations;
+        return {
+          ...course,
+          name: course.name || '',
+          specializations: specialization || { name: '', short_name: '' }
+        };
+      });
+
+      return reply.send(courses as Course[]);
+    } catch (error) {
+      logger.error('Error fetching courses:', error);
+      return reply.status(500).send({ error: 'Internal server error' });
+    }
+  },
+
+  async getCourseById(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
+    try {
+      const { id } = request.params;
+
+      const { data, error } = await supabase
+        .from('courses')
+        .select('*, specializations(*)')
+        .eq('id', id)
+        .single();
+
+      if (error) throw error;
+      if (!data) {
+        return reply.status(404).send({ error: 'Course not found' });
       }
 
-      return reply.code(200).send({ message: 'User deleted successfully' });
-    } catch (error: unknown) {
-      logger.error('Error deleting user:', error);
-      return reply.code(500).send({
-        message: 'Error deleting user',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
+      // Handle array responses from Supabase
+      const specialization = Array.isArray(data.specializations) ? data.specializations[0] : data.specializations;
+      const course = {
+        ...data,
+        name: data.name || '',
+        specializations: specialization || { name: '', short_name: '' }
+      };
+
+      return reply.send(course as Course);
+    } catch (error) {
+      logger.error('Error fetching course:', error);
+      return reply.status(500).send({ error: 'Internal server error' });
     }
   },
 
@@ -726,9 +579,12 @@ export const UserController = {
         }
       }
 
-      const group = student?.groups;
-      const facultyName = student?.faculty?.name;
-      const specialization = group?.specializations;
+      const group = Array.isArray(student?.groups) ? student.groups[0] : student?.groups;
+      const faculty = Array.isArray(student?.faculty) ? student.faculty[0] : student?.faculty;
+      const facultyName = faculty?.name;
+      const specialization = Array.isArray(group?.specializations) ? group.specializations[0] : group?.specializations;
+      const groupName = group?.name;
+      const specializationName = specialization?.name;
 
       logger.info('Successfully fetched user profile:', { userId: user.id });
 
@@ -750,12 +606,12 @@ export const UserController = {
             facultyId: student?.faculty_id || null,
             facultyName: facultyName || null,
             gpa: student?.gpa || 0,
-            groupName: group?.name || null,
+            groupName: groupName || null,
             isModular: group?.is_modular ?? student?.is_modular ?? false,
-            program: group?.name || null,
+            program: groupName || null,
             semester: group?.semester || null,
             specializationId: group?.specialization_id || null,
-            specializationShortName: specialization?.short_name || null,
+            specializationShortName: specializationName || null,
             studentId: user.id,
             studyYear: group?.study_year || null,
             subgroupIndex: group?.subgroup || null
@@ -947,9 +803,12 @@ export const UserController = {
 
       const formattedStudents = students.map(user => {
         const student = Array.isArray(user.students) ? user.students[0] : user.students;
-        const group = student?.groups;
-        const facultyName = student?.faculty?.name;
-        const specialization = group?.specializations;
+        const group = Array.isArray(student?.groups) ? student.groups[0] : student?.groups;
+        const faculty = Array.isArray(student?.faculty) ? student.faculty[0] : student?.faculty;
+        const facultyName = faculty?.name;
+        const specialization = Array.isArray(group?.specializations) ? group.specializations[0] : group?.specializations;
+        const groupName = group?.name;
+        const specializationName = specialization?.name;
 
         return {
           id: user.id,
@@ -969,12 +828,12 @@ export const UserController = {
           advisorName: student?.advisor,
           isActive: user.is_active,
           academicInfo: {
-            groupName: group?.name,
+            groupName: groupName,
             subgroupIndex: group?.subgroup,
             semester: group?.semester,
             studyYear: group?.study_year,
             specializationId: group?.specialization_id,
-            specializationName: specialization?.name,
+            specializationName: specializationName,
             specializationShortName: specialization?.short_name,
             facultyName: facultyName
           }
@@ -1063,9 +922,12 @@ export const UserController = {
       }
 
       const student = Array.isArray(user.students) ? user.students[0] : user.students;
-      const group = student?.groups;
-      const facultyName = student?.faculty?.name;
-      const specialization = group?.specializations;
+      const group = Array.isArray(student?.groups) ? student.groups[0] : student?.groups;
+      const faculty = Array.isArray(student?.faculty) ? student.faculty[0] : student?.faculty;
+      const facultyName = faculty?.name;
+      const specialization = Array.isArray(group?.specializations) ? group.specializations[0] : group?.specializations;
+      const groupName = group?.name;
+      const specializationName = specialization?.name;
 
       const response = {
         success: true,
@@ -1087,12 +949,12 @@ export const UserController = {
           advisorName: student?.advisor,
           isActive: user.is_active,
           academicInfo: {
-            groupName: group?.name,
+            groupName: groupName,
             subgroupIndex: group?.subgroup,
             semester: group?.semester,
             studyYear: group?.study_year,
             specializationId: group?.specialization_id,
-            specializationName: specialization?.name,
+            specializationName: specializationName,
             specializationShortName: specialization?.short_name,
             facultyName: facultyName
           }
@@ -1189,7 +1051,7 @@ export const UserController = {
     }
   },
 
-  async getSessions(request, reply) {
+  async getSessions(request: FastifyRequest, reply: FastifyReply) {
     try {
       if (!request.user) {
         return reply.code(401).send({
@@ -1205,18 +1067,16 @@ export const UserController = {
         .order('login_time', { ascending: false });
 
       if (error) {
-        return reply.code(500).send({
-          message: 'Failed to fetch sessions',
-          code: 'DATABASE_ERROR'
-        });
+        throw error;
       }
 
       return reply.code(200).send({
         sessions
       });
-    } catch (err) {
+    } catch (error) {
+      logger.error('Error fetching sessions:', error);
       return reply.code(500).send({
-        message: 'Internal server error',
+        message: 'Error fetching sessions',
         code: 'INTERNAL_SERVER_ERROR'
       });
     }

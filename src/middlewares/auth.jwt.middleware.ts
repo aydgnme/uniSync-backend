@@ -11,7 +11,7 @@ declare module 'fastify' {
     user: {
       userId: string;
       email: string;
-      role: 'student' | 'staff' | 'admin';
+      role: 'student' | 'staff' | 'admin' | 'anon';
     };
   }
 }

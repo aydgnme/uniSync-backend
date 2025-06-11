@@ -13,7 +13,7 @@ export const swaggerOptions: FastifyDynamicSwaggerOptions = {
     },
     servers: [
       {
-        url: 'http://localhost:3000',
+        url: 'http://localhost:3031',
         description: 'Development server'
       }
     ],

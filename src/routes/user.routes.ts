@@ -1,20 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { UserController } from '../controllers/user.controller';
 import { authJWT } from '../middlewares/auth.jwt.middleware';
-import { logger } from '../utils/logger';
-import { supabase } from '../lib/supabase';
-import '@fastify/jwt';
-
-// Extend FastifyRequest type
-declare module 'fastify' {
-  interface FastifyRequest {
-    user: {
-      userId: string;
-      email: string;
-      role: 'student' | 'staff' | 'admin';
-    };
-  }
-}
 
 export default async function userRoutes(fastify: FastifyInstance) {
   // Register route should not require authentication

@@ -31,7 +31,14 @@ interface JwtPayload {
   };
 }
 
-export const AuthController = {
+export class AuthController {
+  private authService: AuthService;
+  private fastify: FastifyInstance;
+
+  constructor(fastify: FastifyInstance) {
+    this.authService = new AuthService();
+    this.fastify = fastify;
+  }
 
   async login(request: FastifyRequest<{ Body: z.infer<typeof loginSchema> }>, reply: FastifyReply) {
     try {
@@ -45,7 +52,15 @@ export const AuthController = {
         .eq('email', body.email)
         .single();
 
-      if (userError || !user) {
+      if (userError) {
+        logger.error('Database error during login:', userError);
+        return reply.code(500).send({
+          message: 'Internal server error',
+          code: 'DATABASE_ERROR'
+        });
+      }
+
+      if (!user) {
         logger.warn('User not found:', { email: body.email });
         return reply.code(401).send({
           message: 'Invalid email or password',
@@ -75,26 +90,46 @@ export const AuthController = {
       // Create session
       const ipAddress = request.ip;
       const deviceInfo = request.headers['user-agent'] || 'Unknown';
-      const session = await AuthService.createSession(user.id, ipAddress, deviceInfo);
+      
+      try {
+        const session = await this.authService.createSession(user.id, deviceInfo);
+        logger.info('Login successful:', { userId: user.id, sessionId: session.id });
 
-      logger.info('Login successful:', { userId: user.id, sessionId: session.id });
-
-      return reply.code(200).send({
-        token,
-        sessionId: session.id,
-        user: {
-          id: user.id,
-          email: user.email,
-          first_name: user.first_name,
-          last_name: user.last_name,
-          role: user.role,
-          phone_number: user.phone_number,
-          gender: user.gender,
-          date_of_birth: user.date_of_birth,
-          nationality: user.nationality,
-          matriculation_number: user.students?.matriculation_number
-        }
-      });
+        return reply.code(200).send({
+          token,
+          sessionId: session.id,
+          user: {
+            id: user.id,
+            email: user.email,
+            first_name: user.first_name,
+            last_name: user.last_name,
+            role: user.role,
+            phone_number: user.phone_number,
+            gender: user.gender,
+            date_of_birth: user.date_of_birth,
+            nationality: user.nationality,
+            matriculation_number: user.students?.matriculation_number
+          }
+        });
+      } catch (sessionError) {
+        logger.error('Session creation failed:', sessionError);
+        // Session oluşturulamasa bile login başarılı sayılabilir
+        return reply.code(200).send({
+          token,
+          user: {
+            id: user.id,
+            email: user.email,
+            first_name: user.first_name,
+            last_name: user.last_name,
+            role: user.role,
+            phone_number: user.phone_number,
+            gender: user.gender,
+            date_of_birth: user.date_of_birth,
+            nationality: user.nationality,
+            matriculation_number: user.students?.matriculation_number
+          }
+        });
+      }
     } catch (error) {
       logger.error('Login error:', error);
       if (error instanceof z.ZodError) {
@@ -112,7 +147,7 @@ export const AuthController = {
         code: 'INVALID_CREDENTIALS'
       });
     }
-  },
+  }
 
   async refreshToken(request: FastifyRequest, reply: FastifyReply) {
     try {
@@ -168,7 +203,7 @@ export const AuthController = {
         code: 'REFRESH_FAILED'
       });
     }
-  },
+  }
 
   async generateResetCode(request: FastifyRequest<{ Body: z.infer<typeof generateResetCodeSchema> }>, reply: FastifyReply) {
     try {
@@ -254,7 +289,7 @@ export const AuthController = {
         code: 'RESET_CODE_GENERATION_FAILED'
       });
     }
-  },
+  }
 
   async verifyResetCode(request: FastifyRequest<{ Body: z.infer<typeof verifyResetCodeSchema> }>, reply: FastifyReply) {
     try {
@@ -327,7 +362,7 @@ export const AuthController = {
         code: 'INVALID_RESET_CODE'
       });
     }
-  },
+  }
 
   async resetPassword(request: FastifyRequest<{ Body: z.infer<typeof resetPasswordSchema> }>, reply: FastifyReply) {
     try {
@@ -427,7 +462,7 @@ export const AuthController = {
         code: 'PASSWORD_RESET_FAILED'
       });
     }
-  },
+  }
 
   async checkUser(request: FastifyRequest<{ Body: z.infer<typeof checkUserSchema> }>, reply: FastifyReply) {
     try {
@@ -477,7 +512,7 @@ export const AuthController = {
         code: 'USER_NOT_FOUND'
       });
     }
-  },
+  }
 
   async findUserByCnpAndMatriculation(request: FastifyRequest<{ Body: z.infer<typeof findUserSchema> }>, reply: FastifyReply) {
     try {
@@ -535,14 +570,14 @@ export const AuthController = {
         code: 'STUDENT_NOT_FOUND'
       });
     }
-  },
+  }
 
   async logout(request: FastifyRequest, reply: FastifyReply) {
     try {
       const sessionId = request.headers['x-session-id'] as string;
       
       if (sessionId) {
-        await AuthService.endSession(sessionId);
+        await this.authService.endSession(sessionId);
         logger.info('Session ended:', { sessionId });
       }
 
@@ -558,41 +593,33 @@ export const AuthController = {
         code: 'INTERNAL_SERVER_ERROR'
       });
     }
-  },
+  }
 
-  async getUserSessions(request: FastifyRequest, reply: FastifyReply) {
+  async getUserSessions(request: FastifyRequest<{
+    Params: { userId: string }
+  }>, reply: FastifyReply) {
     try {
-      const userId = request.user.userId;
-      const sessions = await AuthService.getUserSessions(userId);
-
-      return reply.code(200).send({
-        sessions
-      });
+      const { userId } = request.params;
+      const sessions = await this.authService.getUserSessions(userId);
+      return reply.send(sessions);
     } catch (error) {
-      logger.error('Get user sessions error:', error);
-      return reply.code(500).send({
-        message: 'Failed to get user sessions',
-        code: 'INTERNAL_SERVER_ERROR'
-      });
+      logger.error('Error fetching user sessions:', error);
+      return reply.status(500).send({ error: 'Internal server error' });
     }
-  },
+  }
 
-  async getActiveSessions(request: FastifyRequest, reply: FastifyReply) {
+  async getActiveSessions(request: FastifyRequest<{
+    Params: { userId: string }
+  }>, reply: FastifyReply) {
     try {
-      const userId = request.user.userId;
-      const sessions = await AuthService.getActiveSessions(userId);
-
-      return reply.code(200).send({
-        sessions
-      });
+      const { userId } = request.params;
+      const sessions = await this.authService.getActiveSessions(userId);
+      return reply.send(sessions);
     } catch (error) {
-      logger.error('Get active sessions error:', error);
-      return reply.code(500).send({
-        message: 'Failed to get active sessions',
-        code: 'INTERNAL_SERVER_ERROR'
-      });
+      logger.error('Error fetching active sessions:', error);
+      return reply.status(500).send({ error: 'Internal server error' });
     }
-  },
+  }
 
   async changePassword(request: FastifyRequest<{ Body: z.infer<typeof changePasswordSchema> }>, reply: FastifyReply) {
     try {
@@ -672,4 +699,221 @@ export const AuthController = {
       });
     }
   }
-}; 
+
+  async createSession(request: FastifyRequest<{
+    Body: {
+      userId: string;
+      deviceInfo: string;
+    }
+  }>, reply: FastifyReply) {
+    try {
+      const { userId, deviceInfo } = request.body;
+      const session = await this.authService.createSession(userId, deviceInfo);
+      return reply.status(201).send(session);
+    } catch (error) {
+      logger.error('Error creating session:', error);
+      return reply.status(500).send({ error: 'Internal server error' });
+    }
+  }
+
+  async endSession(request: FastifyRequest<{
+    Params: { sessionId: string }
+  }>, reply: FastifyReply) {
+    try {
+      const { sessionId } = request.params;
+      await this.authService.endSession(sessionId);
+      return reply.send({ message: 'Session ended successfully' });
+    } catch (error) {
+      logger.error('Error ending session:', error);
+      return reply.status(500).send({ error: 'Internal server error' });
+    }
+  }
+
+  async register(request: FastifyRequest<{ Body: z.infer<typeof registerSchema> }>, reply: FastifyReply) {
+    try {
+      const body = registerSchema.parse(request.body);
+      logger.info('Register attempt:', { email: body.email });
+
+      // Check if user already exists
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', body.email)
+        .single();
+
+      if (existingUser) {
+        logger.warn('User already exists:', { email: body.email });
+        return reply.code(400).send({
+          message: 'User already exists',
+          code: 'USER_EXISTS'
+        });
+      }
+
+      // Hash password
+      const passwordHash = await bcrypt.hash(body.password, 10);
+
+      // Create user
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .insert({
+          email: body.email,
+          password_hash: passwordHash,
+          first_name: body.first_name,
+          last_name: body.last_name,
+          role: 'student'
+        })
+        .select()
+        .single();
+
+      if (userError) {
+        logger.error('Error creating user:', userError);
+        return reply.code(500).send({
+          message: 'Error creating user',
+          code: 'CREATE_USER_ERROR'
+        });
+      }
+
+      // Create student record
+      const { error: studentError } = await supabase
+        .from('students')
+        .insert({
+          user_id: user.id,
+          matriculation_number: body.matriculation_number,
+          cnp: body.cnp
+        });
+
+      if (studentError) {
+        logger.error('Error creating student record:', studentError);
+        // Rollback user creation
+        await supabase.from('users').delete().eq('id', user.id);
+        return reply.code(500).send({
+          message: 'Error creating student record',
+          code: 'CREATE_STUDENT_ERROR'
+        });
+      }
+
+      logger.info('User registered successfully:', { userId: user.id });
+      return reply.code(201).send({
+        message: 'User registered successfully',
+        user: {
+          id: user.id,
+          email: user.email,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          role: user.role
+        }
+      });
+    } catch (error) {
+      logger.error('Registration error:', error);
+      if (error instanceof z.ZodError) {
+        return reply.code(400).send({
+          message: 'Validation error',
+          code: 'VALIDATION_ERROR',
+          details: error.errors.map(err => ({
+            path: err.path.join('.'),
+            message: err.message
+          }))
+        });
+      }
+      return reply.code(500).send({
+        message: 'Internal server error',
+        code: 'INTERNAL_ERROR'
+      });
+    }
+  }
+
+  async getMe(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      const user = request.user;
+      if (!user) {
+        return reply.code(401).send({
+          message: 'Unauthorized',
+          code: 'UNAUTHORIZED'
+        });
+      }
+
+      // Get user details from database
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*, students(*)')
+        .eq('id', user.userId)
+        .single();
+
+      if (userError || !userData) {
+        logger.error('Error fetching user data:', userError);
+        return reply.code(500).send({
+          message: 'Error fetching user data',
+          code: 'FETCH_USER_ERROR'
+        });
+      }
+
+      return reply.send({
+        id: userData.id,
+        email: userData.email,
+        first_name: userData.first_name,
+        last_name: userData.last_name,
+        role: userData.role,
+        phone_number: userData.phone_number,
+        gender: userData.gender,
+        date_of_birth: userData.date_of_birth,
+        nationality: userData.nationality,
+        matriculation_number: userData.students?.matriculation_number
+      });
+    } catch (error) {
+      logger.error('Get me error:', error);
+      return reply.code(500).send({
+        message: 'Internal server error',
+        code: 'INTERNAL_ERROR'
+      });
+    }
+  }
+
+  async validate(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      const user = request.user;
+      if (!user) {
+        return reply.code(401).send({
+          message: 'Unauthorized',
+          code: 'UNAUTHORIZED'
+        });
+      }
+
+      // Get user details from database
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*, students(*)')
+        .eq('id', user.userId)
+        .single();
+
+      if (userError || !userData) {
+        logger.error('Error fetching user data:', userError);
+        return reply.code(401).send({
+          message: 'Invalid token',
+          code: 'INVALID_TOKEN'
+        });
+      }
+
+      return reply.send({
+        valid: true,
+        user: {
+          id: userData.id,
+          email: userData.email,
+          first_name: userData.first_name,
+          last_name: userData.last_name,
+          role: userData.role,
+          phone_number: userData.phone_number,
+          gender: userData.gender,
+          date_of_birth: userData.date_of_birth,
+          nationality: userData.nationality,
+          matriculation_number: userData.students?.matriculation_number
+        }
+      });
+    } catch (error) {
+      logger.error('Token validation error:', error);
+      return reply.code(401).send({
+        message: 'Invalid token',
+        code: 'INVALID_TOKEN'
+      });
+    }
+  }
+} 

@@ -2,282 +2,35 @@
 import { FastifyInstance } from 'fastify';
 import { AuthController } from '../controllers/auth.controller';
 import { authJWT } from '../middlewares/auth.jwt.middleware';
+import { logger } from '../utils/logger';
 
 export default async function authRoutes(fastify: FastifyInstance) {
-  // Add JWT middleware to all routes
-  fastify.addHook('onRequest', authJWT);
+  const authController = new AuthController(fastify);
 
-  // Login endpoint
-  fastify.post('/login', {
-    schema: {
-      tags: ['Auth'],
-      summary: 'User login',
-      description: 'Authenticate user and return JWT token',
-      body: {
-        type: 'object',
-        required: ['email', 'password'],
-        properties: {
-          email: { type: 'string', format: 'email' },
-          password: { type: 'string', minLength: 6 }
-        }
-      },
-      response: {
-        200: {
-          type: 'object',
-          properties: {
-            token: { type: 'string' },
-            user: {
-              type: 'object',
-              properties: {
-                id: { type: 'string' },
-                email: { type: 'string' },
-                role: { type: 'string', enum: ['student', 'staff', 'admin'] }
-              },
-              required: ['id', 'email', 'role']
-            }
-          },
-          required: ['token', 'user']
-        },
-        401: {
-          type: 'object',
-          properties: {
-            message: { type: 'string' }
-          }
-        }
-      }
-    }
-  }, AuthController.login);
+  // Public routes
+  fastify.post('/login', authController.login.bind(authController));
+  fastify.post('/register', authController.register.bind(authController));
+  fastify.post('/check-user', authController.checkUser.bind(authController));
 
-  // Refresh token endpoint
-  fastify.post('/refresh-token', {
-    schema: {
-      tags: ['Auth'],
-      summary: 'Refresh JWT token',
-      description: 'Refresh the JWT token using the current session',
-      response: {
-        200: {
-          type: 'object',
-          properties: {
-            token: { type: 'string' },
-            user: {
-              type: 'object',
-              properties: {
-                id: { type: 'string' },
-                email: { type: 'string' },
-                role: { type: 'string', enum: ['student', 'staff', 'admin'] }
-              },
-              required: ['id', 'email', 'role']
-            }
-          },
-          required: ['token', 'user']
-        },
-        401: {
-          type: 'object',
-          properties: {
-            message: { type: 'string' }
-          }
-        }
-      }
-    }
-  }, AuthController.refreshToken);
+  // Protected routes
+  fastify.get('/validate', {
+    preHandler: authJWT,
+    handler: authController.validate.bind(authController)
+  });
 
-  // Find user endpoint
-  fastify.post('/find-user', {
-    schema: {
-      tags: ['Auth'],
-      summary: 'Find user by CNP and matriculation number',
-      body: {
-        type: 'object',
-        required: ['cnp', 'matriculationNumber'],
-        properties: {
-          cnp: { type: 'string', pattern: '^[0-9]{13}$' },
-          matriculationNumber: { type: 'string', minLength: 1 }
-        }
-      },
-      response: {
-        200: {
-          type: 'object',
-          properties: {
-            user: {
-              type: 'object',
-              properties: {
-                id: { type: 'string', format: 'uuid' },
-                email: { type: 'string' },
-                first_name: { type: 'string' },
-                last_name: { type: 'string' },
-                matriculation_number: { type: 'string' },
-                cnp: { type: 'string' },
-                role: { type: 'string', enum: ['student', 'staff', 'admin'] }
-              },
-              required: ['id', 'email', 'first_name', 'last_name', 'matriculation_number', 'cnp', 'role']
-            }
-          },
-          required: ['user']
-        },
-        404: {
-          type: 'object',
-          properties: {
-            message: { type: 'string' }
-          }
-        }
-      }
-    }
-  }, AuthController.findUserByCnpAndMatriculation);
+  fastify.get('/me', {
+    preHandler: authJWT,
+    handler: authController.getMe.bind(authController)
+  });
 
-  // Generate reset code endpoint
-  fastify.post('/generate-reset-code', {
-    schema: {
-      tags: ['Auth'],
-      summary: 'Generate password reset code',
-      body: {
-        type: 'object',
-        required: ['cnp', 'matriculationNumber'],
-        properties: {
-          cnp: { type: 'string', pattern: '^[0-9]{13}$' },
-          matriculationNumber: { type: 'string', minLength: 1 }
-        }
-      },
-      response: {
-        200: {
-          type: 'object',
-          properties: {
-            message: { type: 'string' },
-            success: { type: 'boolean' }
-          }
-        },
-        400: { $ref: 'Error' },
-        404: { $ref: 'Error' }
-      }
-    }
-  }, AuthController.generateResetCode);
-
-  fastify.post('/verify-reset-code', {
-    schema: {
-      tags: ['Auth'],
-      summary: 'Verify password reset code',
-      body: {
-        type: 'object',
-        required: ['cnp', 'matriculationNumber', 'reset_code'],
-        properties: {
-          cnp: { type: 'string', pattern: '^[0-9]{13}$' },
-          matriculationNumber: { type: 'string', minLength: 1 },
-          reset_code: { type: 'string', pattern: '^[0-9]{6}$' }
-        }
-      },
-      response: {
-        200: {
-          type: 'object',
-          properties: {
-            message: { type: 'string' },
-            isValid: { type: 'boolean' }
-          },
-          required: ['message', 'isValid']
-        },
-        400: {
-          type: 'object',
-          properties: {
-            message: { type: 'string' }
-          }
-        }
-      }
-    }
-  }, AuthController.verifyResetCode);
-
-  fastify.post('/reset-password', {
-    schema: {
-      tags: ['Auth'],
-      summary: 'Reset password with code',
-      body: {
-        type: 'object',
-        required: ['cnp', 'matriculationNumber', 'code', 'newPassword', 'confirmPassword'],
-        properties: {
-          cnp: { type: 'string', pattern: '^[0-9]{13}$' },
-          matriculationNumber: { type: 'string', minLength: 1 },
-          code: { type: 'string', pattern: '^[0-9]{6}$' },
-          newPassword: { type: 'string', minLength: 6 },
-          confirmPassword: { type: 'string', minLength: 6 }
-        }
-      },
-      response: {
-        200: {
-          type: 'object',
-          properties: {
-            message: { type: 'string' }
-          },
-          required: ['message']
-        },
-        400: {
-          type: 'object',
-          properties: {
-            message: { type: 'string' }
-          }
-        }
-      }
-    }
-  }, AuthController.resetPassword);
-
-  fastify.post('/check-user', {
-    schema: {
-      tags: ['Auth'],
-      summary: 'Check if user exists',
-      body: {
-        type: 'object',
-        required: ['email'],
-        properties: {
-          email: { type: 'string', format: 'email' }
-        }
-      },
-      response: {
-        200: {
-          type: 'object',
-          properties: {
-            message: { type: 'string' },
-            user: {
-              type: 'object',
-              properties: {
-                id: { type: 'string', format: 'uuid' },
-                email: { type: 'string' },
-                first_name: { type: 'string' },
-                last_name: { type: 'string' },
-                matriculation_number: { type: 'string' }
-              },
-              required: ['id', 'email', 'first_name', 'last_name', 'matriculation_number']
-            }
-          },
-          required: ['message', 'user']
-        },
-        404: {
-          type: 'object',
-          properties: {
-            message: { type: 'string' }
-          }
-        }
-      }
-    }
-  }, AuthController.checkUser);
-
-  // Logout endpoint
-  fastify.post('/logout', {
-    schema: {
-      tags: ['Auth'],
-      summary: 'User logout',
-      description: 'Logout user and invalidate session',
-      response: {
-        200: {
-          type: 'object',
-          properties: {
-            message: { type: 'string' },
-            success: { type: 'boolean' }
-          },
-          required: ['message', 'success']
-        },
-        401: {
-          type: 'object',
-          properties: {
-            message: { type: 'string' }
-          }
-        }
-      }
-    }
-  }, AuthController.logout);
+  fastify.post('/refresh-token', authController.refreshToken.bind(authController));
+  fastify.post('/logout', authController.logout.bind(authController));
+  fastify.post('/generate-reset-code', authController.generateResetCode.bind(authController));
+  fastify.post('/verify-reset-code', authController.verifyResetCode.bind(authController));
+  fastify.post('/reset-password', authController.resetPassword.bind(authController));
+  fastify.post('/change-password', authController.changePassword.bind(authController));
+  fastify.get('/sessions/:userId', authController.getUserSessions.bind(authController));
+  fastify.get('/sessions/:userId/active', authController.getActiveSessions.bind(authController));
+  fastify.post('/sessions', authController.createSession.bind(authController));
+  fastify.delete('/sessions/:sessionId', authController.endSession.bind(authController));
 }

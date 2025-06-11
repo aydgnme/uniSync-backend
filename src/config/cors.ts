@@ -1,6 +1,6 @@
 export const corsOptions = {
   origin: process.env.NODE_ENV === 'production' 
-    ? ['aydng.me', 'https://www.uniSync.com']
+    ? ['aydng.me', 'https://www.aydgn.me']
     : true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: [

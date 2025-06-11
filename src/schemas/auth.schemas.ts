@@ -87,7 +87,8 @@ export const resetPasswordSchema = z.object({
 
 // User check schema (e.g., for validation on frontend)
 export const checkUserSchema = z.object({
-  email: z.string().email('Invalid email format')
+  email: z.string().email('Invalid email format'),
+  matriculation_number: z.string().min(1, 'Matriculation number is required')
 });
 
 // Find user by CNP & matriculation

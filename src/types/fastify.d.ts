@@ -13,7 +13,7 @@ declare module 'fastify' {
     user: {
       userId: string;
       email: string;
-      role: 'student' | 'staff' | 'admin';
+      role: 'student' | 'staff' | 'admin' | 'anon';
     };
     apiKey?: ApiKey;
   }
@@ -38,12 +38,12 @@ declare module '@fastify/jwt' {
     payload: {
       userId: string;
       email: string;
-      role: 'student' | 'staff' | 'admin';
+      role: 'student' | 'staff' | 'admin' | 'anon';
     };
     user: {
       userId: string;
       email: string;
-      role: 'student' | 'staff' | 'admin';
+      role: 'student' | 'staff' | 'admin' | 'anon';
     };
   }
 }
